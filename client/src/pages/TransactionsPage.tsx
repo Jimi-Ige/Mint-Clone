@@ -4,7 +4,7 @@ import { formatCurrency, formatDate } from '../lib/formatters';
 import { Transaction, Category, Account } from '../types';
 import { useApi } from '../hooks/useApi';
 import Modal from '../components/ui/Modal';
-import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight } from 'lucide-react';
 import CsvImport from '../components/transactions/CsvImport';
 
 export default function TransactionsPage() {
@@ -23,6 +23,7 @@ export default function TransactionsPage() {
   const [categorizeResult, setCategorizeResult] = useState<string | null>(null);
   const [aiCategories, setAiCategories] = useState<string[]>([]);
   const [mobileActions, setMobileActions] = useState(false);
+  const [detectingTransfers, setDetectingTransfers] = useState(false);
 
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
@@ -124,6 +125,20 @@ export default function TransactionsPage() {
     fetchTransactions();
   };
 
+  const handleDetectTransfers = async () => {
+    setDetectingTransfers(true);
+    setCategorizeResult(null);
+    try {
+      const res = await api.post<{ detected: number; message: string }>('/transfers/detect', {});
+      setCategorizeResult(res.message);
+      fetchTransactions();
+    } catch (err: any) {
+      setCategorizeResult(err.message || 'Transfer detection failed');
+    } finally {
+      setDetectingTransfers(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / 15);
   const filteredCategories = categories?.filter(c => !form.type || c.type === form.type) || [];
 
@@ -148,6 +163,14 @@ export default function TransactionsPage() {
           >
             <Sparkles className={`w-4 h-4 ${categorizing ? 'animate-pulse' : ''}`} />
             {categorizing ? 'Categorizing...' : 'Auto-Categorize'}
+          </button>
+          <button
+            onClick={handleDetectTransfers}
+            disabled={detectingTransfers}
+            className="btn-secondary flex items-center gap-2 text-sm"
+          >
+            <ArrowLeftRight className={`w-4 h-4 ${detectingTransfers ? 'animate-pulse' : ''}`} />
+            {detectingTransfers ? 'Detecting...' : 'Detect Transfers'}
           </button>
           <button onClick={openNew} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Transaction
@@ -178,6 +201,9 @@ export default function TransactionsPage() {
                   </button>
                   <button onClick={() => { handleAutoCategorize(); setMobileActions(false); }} disabled={categorizing} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
                     <Sparkles className="w-4 h-4" /> Auto-Categorize
+                  </button>
+                  <button onClick={() => { handleDetectTransfers(); setMobileActions(false); }} disabled={detectingTransfers} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
+                    <ArrowLeftRight className="w-4 h-4" /> Detect Transfers
                   </button>
                 </div>
               </>
@@ -240,6 +266,11 @@ export default function TransactionsPage() {
                     <p className="font-medium text-sm truncate">{tx.description || 'Untitled'}</p>
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
                       <span>{tx.category_name || 'Uncategorized'}</span>
+                      {tx.is_transfer && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-medium">
+                          <ArrowLeftRight className="w-2.5 h-2.5" /> Transfer
+                        </span>
+                      )}
                       {(tx.ai_category || tx.manual_category) && (
                         <>
                           <span className="hidden sm:inline">&middot;</span>
