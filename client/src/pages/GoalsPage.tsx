@@ -46,11 +46,11 @@ export default function GoalsPage() {
   const completedGoals = goals?.filter(g => g.status === 'completed') || [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Savings Goals</h1>
+        <h1 className="text-xl md:text-2xl font-bold">Savings Goals</h1>
         <button onClick={openNew} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> New Goal
+          <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New</span> Goal
         </button>
       </div>
 
@@ -63,9 +63,9 @@ export default function GoalsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {activeGoals.map(goal => (
-              <div key={goal.id} className="card p-5 space-y-4">
+              <div key={goal.id} className="card p-4 md:p-5 space-y-3 md:space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${goal.color}15` }}>
@@ -105,7 +105,7 @@ export default function GoalsPage() {
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-500" /> Completed
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 {completedGoals.map(goal => (
                   <div key={goal.id} className="card p-5 opacity-75">
                     <div className="flex items-center gap-3">

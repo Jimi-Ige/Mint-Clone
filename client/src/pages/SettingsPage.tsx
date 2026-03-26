@@ -50,8 +50,8 @@ export default function SettingsPage() {
   const expenseCategories = categories?.filter(c => c.type === 'expense') || [];
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Settings</h1>
+    <div className="space-y-6 md:space-y-8">
+      <h1 className="text-xl md:text-2xl font-bold">Settings</h1>
 
       {/* Linked Bank Accounts (Plaid) */}
       <section>

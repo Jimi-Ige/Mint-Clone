@@ -52,14 +52,14 @@ export default function ConnectedAccounts({ institutions, onRefresh }: Connected
     <div className="space-y-3">
       {institutions.map(inst => (
         <div key={inst.id} className="card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               {statusIcon(inst.status)}
-              <span className="font-medium">{inst.name}</span>
+              <span className="font-medium text-sm md:text-base truncate">{inst.name}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
               {inst.last_sync && (
-                <span className="text-xs text-gray-400">
+                <span className="hidden sm:inline text-xs text-gray-400">
                   Last sync: {new Date(inst.last_sync).toLocaleDateString()}
                 </span>
               )}

@@ -59,34 +59,34 @@ export default function BudgetPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Budget</h1>
+        <h1 className="text-xl md:text-2xl font-bold">Budget</h1>
         <button onClick={openNew} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Budget
+          <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add</span> Budget
         </button>
       </div>
 
       {/* Month Navigation */}
-      <div className="flex items-center gap-4">
-        <button onClick={() => changeMonth(-1)} className="btn-secondary">&larr;</button>
-        <span className="text-lg font-semibold">{formatMonth(month, year)}</span>
-        <button onClick={() => changeMonth(1)} className="btn-secondary">&rarr;</button>
+      <div className="flex items-center gap-3 md:gap-4">
+        <button onClick={() => changeMonth(-1)} className="btn-secondary px-3">&larr;</button>
+        <span className="text-base md:text-lg font-semibold">{formatMonth(month, year)}</span>
+        <button onClick={() => changeMonth(1)} className="btn-secondary px-3">&rarr;</button>
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="card p-5">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total Budget</p>
-          <p className="text-2xl font-bold mt-1">{formatCurrency(totalBudget)}</p>
+      <div className="grid grid-cols-3 gap-2 md:gap-4">
+        <div className="card p-3 md:p-5">
+          <p className="text-[11px] md:text-sm text-gray-500 dark:text-gray-400">Budget</p>
+          <p className="text-lg md:text-2xl font-bold mt-0.5 md:mt-1 truncate">{formatCurrency(totalBudget)}</p>
         </div>
-        <div className="card p-5">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total Spent</p>
-          <p className="text-2xl font-bold mt-1 text-rose-500">{formatCurrency(totalSpent)}</p>
+        <div className="card p-3 md:p-5">
+          <p className="text-[11px] md:text-sm text-gray-500 dark:text-gray-400">Spent</p>
+          <p className="text-lg md:text-2xl font-bold mt-0.5 md:mt-1 text-rose-500 truncate">{formatCurrency(totalSpent)}</p>
         </div>
-        <div className="card p-5">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Remaining</p>
-          <p className={`text-2xl font-bold mt-1 ${totalBudget - totalSpent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+        <div className="card p-3 md:p-5">
+          <p className="text-[11px] md:text-sm text-gray-500 dark:text-gray-400">Left</p>
+          <p className={`text-lg md:text-2xl font-bold mt-0.5 md:mt-1 truncate ${totalBudget - totalSpent >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
             {formatCurrency(totalBudget - totalSpent)}
           </p>
         </div>
@@ -100,25 +100,25 @@ export default function BudgetPage() {
             <p className="text-sm">Create your first budget to start tracking spending</p>
           </div>
         ) : budgets.map(b => (
-          <div key={b.id} className="card p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${b.category_color}15` }}>
+          <div key={b.id} className="card p-4 md:p-5">
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: `${b.category_color}15` }}>
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: b.category_color }} />
                 </div>
-                <div>
-                  <p className="font-medium">{b.category_name}</p>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm md:text-base truncate">{b.category_name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {formatCurrency(b.spent || 0)} of {formatCurrency(b.amount)}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <span className={`text-sm font-semibold mr-2 ${(b.spent || 0) > b.amount ? 'text-rose-500' : 'text-gray-600 dark:text-gray-400'}`}>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <span className={`text-xs md:text-sm font-semibold mr-1 md:mr-2 ${(b.spent || 0) > b.amount ? 'text-rose-500' : 'text-gray-600 dark:text-gray-400'}`}>
                   {formatCurrency(b.amount - (b.spent || 0))} left
                 </span>
                 <button onClick={() => openEdit(b)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={() => handleDelete(b.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => handleDelete(b.id)} className="hidden sm:block p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
             <ProgressBar current={b.spent || 0} target={b.amount} color={(b.spent || 0) > b.amount ? '#f43f5e' : b.category_color} showLabel={false} />
