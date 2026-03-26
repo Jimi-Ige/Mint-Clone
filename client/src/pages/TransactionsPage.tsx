@@ -4,7 +4,8 @@ import { formatCurrency, formatDate } from '../lib/formatters';
 import { Transaction, Category, Account } from '../types';
 import { useApi } from '../hooks/useApi';
 import Modal from '../components/ui/Modal';
-import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload } from 'lucide-react';
+import CsvImport from '../components/transactions/CsvImport';
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -17,6 +18,7 @@ export default function TransactionsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
 
+  const [importOpen, setImportOpen] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
   const [categorizeResult, setCategorizeResult] = useState<string | null>(null);
   const [aiCategories, setAiCategories] = useState<string[]>([]);
@@ -82,6 +84,27 @@ export default function TransactionsPage() {
     fetchTransactions();
   };
 
+  const handleExport = () => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (filterType) params.set('type', filterType);
+    if (filterCategory) params.set('categoryId', filterCategory);
+    const token = localStorage.getItem('token');
+    // Use fetch directly to handle file download with auth header
+    fetch(`/api/transactions/export?${params}`, {
+      headers: { Authorization: `Bearer ${token || ''}` },
+    })
+      .then(res => res.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'transactions.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+  };
+
   const handleAutoCategorize = async () => {
     setCategorizing(true);
     setCategorizeResult(null);
@@ -113,6 +136,12 @@ export default function TransactionsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Transactions</h1>
         <div className="flex items-center gap-2">
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-2 text-sm">
+            <Download className="w-4 h-4" /> Export
+          </button>
+          <button onClick={() => setImportOpen(true)} className="btn-secondary flex items-center gap-2 text-sm">
+            <Upload className="w-4 h-4" /> Import
+          </button>
           <button
             onClick={handleAutoCategorize}
             disabled={categorizing}
@@ -282,6 +311,9 @@ export default function TransactionsPage() {
           <button type="submit" className="btn-primary w-full">{editing ? 'Update' : 'Add'} Transaction</button>
         </form>
       </Modal>
+
+      {/* CSV Import Modal */}
+      <CsvImport open={importOpen} onClose={() => setImportOpen(false)} onSuccess={fetchTransactions} />
     </div>
   );
 }

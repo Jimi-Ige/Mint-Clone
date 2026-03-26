@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Parser } from 'json2csv';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
 import { categorizeTransactions, CATEGORIES } from '../services/categorization';
@@ -134,6 +135,124 @@ router.delete('/:id', async (req: AuthRequest, res) => {
 
     await client.query('COMMIT');
     res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/transactions/export — export transactions as CSV
+router.get('/export', async (req: AuthRequest, res) => {
+  const { startDate, endDate, categoryId, type } = req.query;
+
+  let where = 'WHERE t.user_id = $1';
+  const params: any[] = [req.userId];
+  let paramIdx = 2;
+
+  if (startDate) { where += ` AND t.date >= $${paramIdx++}`; params.push(startDate); }
+  if (endDate) { where += ` AND t.date <= $${paramIdx++}`; params.push(endDate); }
+  if (categoryId) { where += ` AND t.category_id = $${paramIdx++}`; params.push(categoryId); }
+  if (type) { where += ` AND t.type = $${paramIdx++}`; params.push(type); }
+
+  const { rows } = await pool.query(`
+    SELECT t.date, t.description, t.amount, t.type, c.name as category, a.name as account,
+           t.merchant_name, COALESCE(t.manual_category, t.ai_category) as ai_category
+    FROM transactions t
+    LEFT JOIN categories c ON t.category_id = c.id
+    LEFT JOIN accounts a ON t.account_id = a.id
+    ${where}
+    ORDER BY t.date DESC
+  `, params);
+
+  const parser = new Parser({ fields: ['date', 'description', 'amount', 'type', 'category', 'account', 'merchant_name', 'ai_category'] });
+  const csv = parser.parse(rows);
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=transactions.csv');
+  res.send(csv);
+});
+
+// POST /api/transactions/import — import transactions from CSV
+router.post('/import', async (req: AuthRequest, res) => {
+  const { transactions: rows } = req.body;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ error: 'No transactions provided' });
+  }
+
+  // Get user's accounts and categories for matching
+  const { rows: userAccounts } = await pool.query('SELECT id, name FROM accounts WHERE user_id = $1', [req.userId]);
+  const { rows: userCategories } = await pool.query('SELECT id, name, type FROM categories WHERE user_id = $1', [req.userId]);
+
+  const accountMap: Record<string, number> = {};
+  userAccounts.forEach((a: any) => { accountMap[a.name.toLowerCase()] = a.id; });
+  const categoryMap: Record<string, { id: number; type: string }> = {};
+  userCategories.forEach((c: any) => { categoryMap[c.name.toLowerCase()] = { id: c.id, type: c.type }; });
+
+  const defaultAccountId = userAccounts[0]?.id;
+  if (!defaultAccountId) return res.status(400).json({ error: 'No accounts found. Create an account first.' });
+
+  let imported = 0;
+  let duplicates = 0;
+  const errors: string[] = [];
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const { date, description, amount, type, category, account } = row;
+
+      if (!date || !amount) {
+        errors.push(`Row ${i + 1}: missing date or amount`);
+        continue;
+      }
+
+      const parsedAmount = Math.abs(parseFloat(amount));
+      if (isNaN(parsedAmount)) {
+        errors.push(`Row ${i + 1}: invalid amount "${amount}"`);
+        continue;
+      }
+
+      // Determine type: explicit, or infer from negative amount
+      const txType = type?.toLowerCase() === 'income' ? 'income'
+        : type?.toLowerCase() === 'expense' ? 'expense'
+        : parseFloat(amount) < 0 ? 'expense' : 'income';
+
+      // Match account
+      const accountId = account ? (accountMap[account.toLowerCase()] || defaultAccountId) : defaultAccountId;
+
+      // Match category
+      const catMatch = category ? categoryMap[category.toLowerCase()] : null;
+      const categoryId = catMatch ? catMatch.id : null;
+
+      // Duplicate detection: same user, date, description, amount
+      const dupCheck = await client.query(
+        `SELECT id FROM transactions WHERE user_id = $1 AND date = $2 AND description = $3 AND amount = $4 AND type = $5 LIMIT 1`,
+        [req.userId, date, description || '', parsedAmount, txType]
+      );
+      if (dupCheck.rows.length > 0) {
+        duplicates++;
+        continue;
+      }
+
+      await client.query(
+        `INSERT INTO transactions (user_id, account_id, category_id, amount, type, description, date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [req.userId, accountId, categoryId, parsedAmount, txType, description || '', date]
+      );
+
+      // Update account balance
+      const balanceChange = txType === 'income' ? parsedAmount : -parsedAmount;
+      await client.query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [balanceChange, accountId]);
+
+      imported++;
+    }
+
+    await client.query('COMMIT');
+    res.json({ imported, duplicates, errors, total: rows.length });
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

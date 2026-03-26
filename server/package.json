@@ -15,6 +15,7 @@
     "dotenv": "^17.3.1",
     "express": "^4.21.0",
     "express-rate-limit": "^8.3.1",
+    "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
     "plaid": "^41.4.0"
@@ -24,6 +25,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/json2csv": "^5.0.7",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/pg": "^8.20.0",
     "tsx": "^4.19.0",
