@@ -43,33 +43,33 @@ router.get('/', async (req: AuthRequest, res) => {
     'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE user_id = $1', [req.userId]
   );
 
-  // Period income
+  // Period income (excluding transfers)
   const incomeResult = await pool.query(
-    `SELECT COALESCE(SUM(amount), 0) as total FROM transactions t WHERE ${fullFilter} AND t.type = 'income'`,
+    `SELECT COALESCE(SUM(amount), 0) as total FROM transactions t WHERE ${fullFilter} AND t.type = 'income' AND t.is_transfer = FALSE`,
     baseParams
   );
 
-  // Period expenses
+  // Period expenses (excluding transfers)
   const expenseResult = await pool.query(
-    `SELECT COALESCE(SUM(amount), 0) as total FROM transactions t WHERE ${fullFilter} AND t.type = 'expense'`,
+    `SELECT COALESCE(SUM(amount), 0) as total FROM transactions t WHERE ${fullFilter} AND t.type = 'expense' AND t.is_transfer = FALSE`,
     baseParams
   );
 
-  // Spending by category (filtered)
+  // Spending by category (filtered, excluding transfers)
   const { rows: spendingByCategory } = await pool.query(`
     SELECT c.name, c.color, c.icon, COALESCE(SUM(t.amount), 0) as amount
     FROM transactions t
     JOIN categories c ON t.category_id = c.id
-    WHERE ${fullFilter} AND t.type = 'expense'
+    WHERE ${fullFilter} AND t.type = 'expense' AND t.is_transfer = FALSE
     GROUP BY c.id, c.name, c.color, c.icon
     ORDER BY amount DESC
   `, baseParams);
 
-  // Top merchants (filtered)
+  // Top merchants (filtered, excluding transfers)
   const { rows: topMerchants } = await pool.query(`
     SELECT COALESCE(t.merchant_name, t.description) as name, SUM(t.amount) as amount, COUNT(*) as count
     FROM transactions t
-    WHERE ${fullFilter} AND t.type = 'expense' AND (t.merchant_name IS NOT NULL OR t.description != '')
+    WHERE ${fullFilter} AND t.type = 'expense' AND t.is_transfer = FALSE AND (t.merchant_name IS NOT NULL OR t.description != '')
     GROUP BY COALESCE(t.merchant_name, t.description)
     ORDER BY amount DESC
     LIMIT 5
@@ -86,12 +86,12 @@ router.get('/', async (req: AuthRequest, res) => {
 
     const income = await pool.query(`
       SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-      WHERE user_id = $1 AND type = 'income' AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
+      WHERE user_id = $1 AND type = 'income' AND is_transfer = FALSE AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
     `, [req.userId, m, y]);
 
     const expenses = await pool.query(`
       SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-      WHERE user_id = $1 AND type = 'expense' AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
+      WHERE user_id = $1 AND type = 'expense' AND is_transfer = FALSE AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
     `, [req.userId, m, y]);
 
     monthlyTrend.push({

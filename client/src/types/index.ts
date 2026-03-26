@@ -41,6 +41,8 @@ export interface Transaction {
   ai_category?: string;
   ai_reason?: string;
   manual_category?: string;
+  is_transfer?: boolean;
+  transfer_pair_id?: number | null;
   created_at: string;
   category_name?: string;
   category_icon?: string;
@@ -70,6 +72,19 @@ export interface SavingsGoal {
   color: string;
   status: 'active' | 'completed' | 'cancelled';
   created_at: string;
+}
+
+export interface Transfer {
+  id: number;
+  description: string;
+  amount: number;
+  date: string;
+  type: string;
+  transfer_pair_id: number | null;
+  account_id: number;
+  from_account: string;
+  to_account_id: number;
+  to_account: string;
 }
 
 export interface RecurringPattern {

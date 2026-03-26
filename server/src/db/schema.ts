@@ -109,6 +109,19 @@ export async function initializeDatabase() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      -- Transfer detection columns on transactions
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'is_transfer') THEN
+          ALTER TABLE transactions ADD COLUMN is_transfer BOOLEAN NOT NULL DEFAULT FALSE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'transactions' AND column_name = 'transfer_pair_id') THEN
+          ALTER TABLE transactions ADD COLUMN transfer_pair_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS idx_transactions_transfer ON transactions(user_id, is_transfer) WHERE is_transfer = TRUE;
+
       CREATE INDEX IF NOT EXISTS idx_recurring_user ON recurring_patterns(user_id);
       CREATE INDEX IF NOT EXISTS idx_recurring_next ON recurring_patterns(next_expected);
       CREATE INDEX IF NOT EXISTS idx_recurring_status ON recurring_patterns(user_id, status);
