@@ -1,0 +1,14 @@
+{
+  "name": "mint-clone",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["client", "server"],
+  "scripts": {
+    "dev": "concurrently -n client,server -c blue,green \"npm run dev -w client\" \"npm run dev -w server\"",
+    "build": "npm run build -w client && npm run build -w server",
+    "start": "npm start -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
