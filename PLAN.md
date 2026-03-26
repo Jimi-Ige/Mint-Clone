@@ -167,4 +167,4 @@ React SPA (Vite)  →  Azure App Service (Express API)  →  Azure PostgreSQL
 | v2.5 | Net worth tracking over time | Done |
 | v2.6 | Tag system (travel, recurring, refund) | Done |
 | v2.7 | Hierarchical subcategory taxonomy | Done |
-| v2.8 | Multi-currency support | Next |
+| v2.8 | Multi-currency support | Done |

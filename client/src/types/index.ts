@@ -52,6 +52,7 @@ export interface Transaction {
   category_icon?: string;
   category_color?: string;
   account_name?: string;
+  account_currency?: string;
 }
 
 export interface Budget {
@@ -133,6 +134,7 @@ export interface RecurringPattern {
 
 export interface DashboardData {
   totalBalance: number;
+  baseCurrency?: string;
   monthIncome: number;
   monthExpenses: number;
   netFlow: number;
@@ -143,4 +145,10 @@ export interface DashboardData {
   recentTransactions: Transaction[];
   goals: SavingsGoal[];
   filters: { startDate: string; endDate: string };
+}
+
+export interface CurrencyInfo {
+  code: string;
+  name: string;
+  symbol: string;
 }

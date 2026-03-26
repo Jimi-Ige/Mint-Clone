@@ -9,6 +9,7 @@ export async function initializeDatabase() {
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         name TEXT NOT NULL,
+        base_currency TEXT NOT NULL DEFAULT 'USD',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
@@ -141,6 +142,27 @@ export async function initializeDatabase() {
       );
 
       CREATE INDEX IF NOT EXISTS idx_snapshots_user_date ON balance_snapshots(user_id, date);
+
+      -- Exchange rates cache for multi-currency
+      CREATE TABLE IF NOT EXISTS exchange_rates (
+        id SERIAL PRIMARY KEY,
+        base_currency TEXT NOT NULL,
+        target_currency TEXT NOT NULL,
+        rate NUMERIC(16,8) NOT NULL,
+        date DATE NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(base_currency, target_currency, date)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_exchange_rates_lookup ON exchange_rates(base_currency, date);
+
+      -- Multi-currency: add base_currency to users
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'base_currency') THEN
+          ALTER TABLE users ADD COLUMN base_currency TEXT NOT NULL DEFAULT 'USD';
+        END IF;
+      END $$;
 
       -- Hierarchical categories: add parent_id column
       DO $$

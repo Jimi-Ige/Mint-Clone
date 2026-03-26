@@ -26,7 +26,7 @@ router.get('/', async (req: AuthRequest, res) => {
 
   const txParams = [...params, Number(limit), offset];
   const { rows: transactions } = await pool.query(`
-    SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name,
+    SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name, a.currency as account_currency,
            COALESCE(
              (SELECT json_agg(json_build_object('id', tg.id, 'name', tg.name, 'color', tg.color) ORDER BY tg.name)
               FROM transaction_tags tt JOIN tags tg ON tt.tag_id = tg.id

@@ -4,6 +4,7 @@ interface User {
   id: number;
   email: string;
   name: string;
+  base_currency: string;
 }
 
 interface AuthCtx {
@@ -13,11 +14,13 @@ interface AuthCtx {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
+  updateBaseCurrency: (currency: string) => void;
 }
 
 const AuthContext = createContext<AuthCtx>({
   user: null, token: null, loading: true,
   login: async () => {}, register: async () => {}, logout: () => {},
+  updateBaseCurrency: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -29,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
         .then(res => res.ok ? res.json() : Promise.reject())
-        .then(data => setUser(data))
+        .then(data => setUser({ ...data, base_currency: data.base_currency || 'USD' }))
         .catch(() => { setToken(null); localStorage.removeItem('token'); })
         .finally(() => setLoading(false));
     } else {
@@ -50,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     localStorage.setItem('token', data.token);
     setToken(data.token);
-    setUser(data.user);
+    setUser({ ...data.user, base_currency: data.user.base_currency || 'USD' });
   }, []);
 
   const register = useCallback(async (email: string, password: string, name: string) => {
@@ -66,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     localStorage.setItem('token', data.token);
     setToken(data.token);
-    setUser(data.user);
+    setUser({ ...data.user, base_currency: data.user.base_currency || 'USD' });
   }, []);
 
   const logout = useCallback(() => {
@@ -75,8 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateBaseCurrency = useCallback((currency: string) => {
+    setUser(prev => prev ? { ...prev, base_currency: currency } : prev);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, updateBaseCurrency }}>
       {children}
     </AuthContext.Provider>
   );

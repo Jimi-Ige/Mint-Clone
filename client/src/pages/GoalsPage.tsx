@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
 import { SavingsGoal } from '../types';
-import { formatCurrency } from '../lib/formatters';
+import { formatCurrency as formatCurrencyRaw } from '../lib/formatters';
 import ProgressBar from '../components/ui/ProgressBar';
 import Modal from '../components/ui/Modal';
 import { Plus, Trash2, DollarSign, Trophy, Target } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const goalColors = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#f97316'];
 
 export default function GoalsPage() {
+  const { user } = useAuth();
+  const formatCurrency = useCallback((amount: number) => formatCurrencyRaw(amount, user?.base_currency), [user?.base_currency]);
   const { data: goals, refetch } = useApi<SavingsGoal[]>('/goals');
   const [modalOpen, setModalOpen] = useState(false);
   const [contributeModal, setContributeModal] = useState<SavingsGoal | null>(null);

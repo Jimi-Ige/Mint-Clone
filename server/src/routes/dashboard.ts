@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
+import { convertAmount } from '../services/exchangeRates';
 
 const router = Router();
 
@@ -38,10 +39,18 @@ router.get('/', async (req: AuthRequest, res) => {
   const dateFilter = `t.date >= $2 AND t.date <= $3`;
   const fullFilter = `t.user_id = $1 AND ${dateFilter}${accountFilter}${categoryFilter}`;
 
-  // Total balance (unfiltered — always shows full net worth)
-  const balanceResult = await pool.query(
-    'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE user_id = $1', [req.userId]
+  // Get user's base currency
+  const userResult = await pool.query('SELECT base_currency FROM users WHERE id = $1', [req.userId]);
+  const baseCurrency = userResult.rows[0]?.base_currency || 'USD';
+
+  // Total balance (unfiltered — convert each account's balance to base currency)
+  const { rows: allAccounts } = await pool.query(
+    'SELECT balance, currency FROM accounts WHERE user_id = $1', [req.userId]
   );
+  let totalBalance = 0;
+  for (const acc of allAccounts) {
+    totalBalance += await convertAmount(parseFloat(acc.balance), acc.currency, baseCurrency);
+  }
 
   // Period income (excluding transfers)
   const incomeResult = await pool.query(
@@ -130,7 +139,8 @@ router.get('/', async (req: AuthRequest, res) => {
   const savingsRate = monthIncome > 0 ? Math.round(((monthIncome - monthExpenses) / monthIncome) * 100) : 0;
 
   res.json({
-    totalBalance: parseFloat(balanceResult.rows[0].total),
+    totalBalance,
+    baseCurrency,
     monthIncome,
     monthExpenses,
     netFlow,

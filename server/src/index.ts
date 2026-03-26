@@ -18,6 +18,7 @@ import recurringRouter from './routes/recurring';
 import transfersRouter from './routes/transfers';
 import snapshotsRouter from './routes/snapshots';
 import tagsRouter from './routes/tags';
+import currencyRouter from './routes/currency';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -44,7 +45,7 @@ app.use('/api/auth', authRouter);
 app.get('/api/auth/me', authMiddleware, async (req: any, res) => {
   try {
     const pool = (await import('./db/connection')).default;
-    const result = await pool.query('SELECT id, email, name, created_at FROM users WHERE id = $1', [req.userId]);
+    const result = await pool.query('SELECT id, email, name, base_currency, created_at FROM users WHERE id = $1', [req.userId]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
 
@@ -83,6 +84,7 @@ app.use('/api/recurring', authMiddleware, recurringRouter);
 app.use('/api/transfers', authMiddleware, transfersRouter);
 app.use('/api/snapshots', authMiddleware, snapshotsRouter);
 app.use('/api/tags', authMiddleware, tagsRouter);
+app.use('/api/currency', authMiddleware, currencyRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');
