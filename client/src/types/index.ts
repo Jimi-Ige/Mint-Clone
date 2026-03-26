@@ -4,7 +4,18 @@ export interface Account {
   type: string;
   balance: number;
   currency: string;
+  institution_id?: number;
+  plaid_account_id?: string;
   created_at: string;
+}
+
+export interface Institution {
+  id: number;
+  name: string;
+  status: 'active' | 'error' | 'login_required';
+  last_sync: string | null;
+  created_at: string;
+  accounts: Account[];
 }
 
 export interface Category {
@@ -23,6 +34,10 @@ export interface Transaction {
   type: 'income' | 'expense';
   description: string;
   date: string;
+  merchant_name?: string;
+  plaid_transaction_id?: string;
+  plaid_category?: string;
+  pending?: boolean;
   created_at: string;
   category_name?: string;
   category_icon?: string;
