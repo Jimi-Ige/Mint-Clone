@@ -76,9 +76,12 @@ export interface DashboardData {
   totalBalance: number;
   monthIncome: number;
   monthExpenses: number;
+  netFlow: number;
   savingsRate: number;
   spendingByCategory: { name: string; amount: number; color: string; icon: string }[];
-  monthlyTrend: { month: string; income: number; expenses: number }[];
+  topMerchants: { name: string; amount: number; count: number }[];
+  monthlyTrend: { month: string; income: number; expenses: number; net: number }[];
   recentTransactions: Transaction[];
   goals: SavingsGoal[];
+  filters: { startDate: string; endDate: string };
 }
