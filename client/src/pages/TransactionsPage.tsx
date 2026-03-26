@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
 import { Transaction, Category, Account, Tag } from '../types';
@@ -158,6 +158,31 @@ export default function TransactionsPage() {
   const totalPages = Math.ceil(total / 15);
   const filteredCategories = categories?.filter(c => !form.type || c.type === form.type) || [];
 
+  // Build grouped category options for selects
+  const groupedCategoryOptions = useMemo(() => {
+    if (!categories) return [];
+    const parents = categories.filter(c => !c.parent_id);
+    const children = categories.filter(c => c.parent_id);
+    const options: { id: number; name: string; isParent: boolean; type: string }[] = [];
+    for (const p of parents) {
+      options.push({ id: p.id, name: p.name, isParent: true, type: p.type });
+      const subs = children.filter(c => c.parent_id === p.id);
+      for (const s of subs) {
+        options.push({ id: s.id, name: `  ${s.name}`, isParent: false, type: s.type });
+      }
+    }
+    // Add any orphaned children (shouldn't happen but be safe)
+    const parentIds = new Set(parents.map(p => p.id));
+    for (const c of children) {
+      if (!parentIds.has(c.parent_id!)) {
+        options.push({ id: c.id, name: c.name, isParent: false, type: c.type });
+      }
+    }
+    return options;
+  }, [categories]);
+
+  const filteredGroupedCategories = groupedCategoryOptions.filter(c => !form.type || c.type === form.type);
+
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header */}
@@ -252,7 +277,11 @@ export default function TransactionsPage() {
           </select>
           <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
             <option value="">All Categories</option>
-            {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {groupedCategoryOptions.map(c => (
+              <option key={c.id} value={c.id} className={c.isParent ? 'font-semibold' : ''}>
+                {c.name}
+              </option>
+            ))}
           </select>
           {allTags.length > 0 && (
             <select value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
@@ -452,7 +481,9 @@ export default function TransactionsPage() {
               <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Category</label>
               <select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })} className="input">
                 <option value="">Select category</option>
-                {filteredCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {filteredGroupedCategories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
               </select>
             </div>
             <div>

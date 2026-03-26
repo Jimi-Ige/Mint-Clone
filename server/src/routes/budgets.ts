@@ -11,16 +11,18 @@ router.get('/', async (req: AuthRequest, res) => {
 
   const { rows } = await pool.query(`
     SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
+      c.parent_id,
       COALESCE((
         SELECT SUM(t.amount) FROM transactions t
-        WHERE t.category_id = b.category_id AND t.type = 'expense'
+        WHERE t.category_id IN (SELECT id FROM categories WHERE id = b.category_id OR parent_id = b.category_id)
+        AND t.type = 'expense'
         AND EXTRACT(MONTH FROM t.date) = b.month
         AND EXTRACT(YEAR FROM t.date) = b.year
       ), 0) as spent
     FROM budgets b
     LEFT JOIN categories c ON b.category_id = c.id
     WHERE b.user_id = $1 AND b.month = $2 AND b.year = $3
-    ORDER BY c.name
+    ORDER BY COALESCE(c.parent_id, c.id), c.parent_id NULLS FIRST, c.name
   `, [req.userId, m, y]);
 
   res.json(rows);

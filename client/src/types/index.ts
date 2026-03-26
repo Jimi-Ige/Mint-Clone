@@ -24,6 +24,9 @@ export interface Category {
   type: 'income' | 'expense';
   icon: string;
   color: string;
+  parent_id?: number | null;
+  parent_name?: string;
+  subcategories?: Category[];
 }
 
 export interface Transaction {
@@ -61,6 +64,7 @@ export interface Budget {
   category_name?: string;
   category_icon?: string;
   category_color?: string;
+  parent_id?: number | null;
 }
 
 export interface SavingsGoal {

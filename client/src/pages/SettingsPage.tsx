@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
 import { Category, Account, Institution, Tag } from '../types';
 import Modal from '../components/ui/Modal';
-import { Plus, Trash2, Edit2, Palette, TagIcon } from 'lucide-react';
+import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown } from 'lucide-react';
 import PlaidLinkButton from '../components/settings/PlaidLink';
 import ConnectedAccounts from '../components/settings/ConnectedAccounts';
 
@@ -21,17 +21,23 @@ export default function SettingsPage() {
   };
   const [catModal, setCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
-  const [catForm, setCatForm] = useState({ name: '', type: 'expense', color: '#10b981' });
+  const [catForm, setCatForm] = useState({ name: '', type: 'expense', color: '#10b981', parent_id: '' });
   const [accModal, setAccModal] = useState(false);
   const [accForm, setAccForm] = useState({ name: '', type: 'checking' });
+  const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set());
 
-  const openNewCat = () => { setEditingCat(null); setCatForm({ name: '', type: 'expense', color: '#10b981' }); setCatModal(true); };
-  const openEditCat = (c: Category) => { setEditingCat(c); setCatForm({ name: c.name, type: c.type, color: c.color }); setCatModal(true); };
+  const openNewCat = () => { setEditingCat(null); setCatForm({ name: '', type: 'expense', color: '#10b981', parent_id: '' }); setCatModal(true); };
+  const openEditCat = (c: Category) => {
+    setEditingCat(c);
+    setCatForm({ name: c.name, type: c.type, color: c.color, parent_id: c.parent_id?.toString() || '' });
+    setCatModal(true);
+  };
 
   const handleCatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingCat) await api.put(`/categories/${editingCat.id}`, catForm);
-    else await api.post('/categories', catForm);
+    const body = { ...catForm, parent_id: catForm.parent_id ? Number(catForm.parent_id) : null };
+    if (editingCat) await api.put(`/categories/${editingCat.id}`, body);
+    else await api.post('/categories', body);
     setCatModal(false);
     refetchCats();
   };
@@ -65,8 +71,69 @@ export default function SettingsPage() {
 
   const deleteTag = async (id: number) => { await api.delete(`/tags/${id}`); refetchTags(); };
 
-  const incomeCategories = categories?.filter(c => c.type === 'income') || [];
-  const expenseCategories = categories?.filter(c => c.type === 'expense') || [];
+  // Build category tree
+  const categoryTree = useMemo(() => {
+    if (!categories) return { income: [], expense: [] };
+    const parents = categories.filter(c => !c.parent_id);
+    const children = categories.filter(c => c.parent_id);
+
+    const buildTree = (type: 'income' | 'expense') => {
+      const typeParents = parents.filter(p => p.type === type);
+      return typeParents.map(p => ({
+        ...p,
+        subcategories: children.filter(c => c.parent_id === p.id),
+      }));
+    };
+
+    return { income: buildTree('income'), expense: buildTree('expense') };
+  }, [categories]);
+
+  // Parent categories available for subcategory assignment
+  const parentCategories = useMemo(() => {
+    return categories?.filter(c => !c.parent_id) || [];
+  }, [categories]);
+
+  const toggleParent = (id: number) => {
+    setExpandedParents(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const renderCategoryItem = (c: Category & { subcategories?: Category[] }, isSubcategory = false) => {
+    const hasChildren = !isSubcategory && (c.subcategories?.length || 0) > 0;
+    const isExpanded = expandedParents.has(c.id);
+
+    return (
+      <div key={c.id}>
+        <div className={`card p-3 flex items-center justify-between ${isSubcategory ? 'ml-6 border-l-2' : ''}`} style={isSubcategory ? { borderLeftColor: c.color } : undefined}>
+          <div className="flex items-center gap-3">
+            {hasChildren ? (
+              <button onClick={() => toggleParent(c.id)} className="p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              </button>
+            ) : (
+              <div className="w-5" />
+            )}
+            <div className="w-6 h-6 rounded-full" style={{ backgroundColor: c.color }} />
+            <div>
+              <span className="font-medium text-sm">{c.name}</span>
+              {hasChildren && (
+                <span className="text-xs text-gray-400 ml-2">({c.subcategories!.length} sub)</span>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-1">
+            <button onClick={() => openEditCat(c)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><Edit2 className="w-3.5 h-3.5" /></button>
+            <button onClick={() => deleteCat(c.id)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
+        </div>
+        {hasChildren && isExpanded && c.subcategories!.map(sub => renderCategoryItem(sub, true))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -120,36 +187,14 @@ export default function SettingsPage() {
           <div>
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Income</h3>
             <div className="space-y-1">
-              {incomeCategories.map(c => (
-                <div key={c.id} className="card p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full" style={{ backgroundColor: c.color }} />
-                    <span className="font-medium text-sm">{c.name}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => openEditCat(c)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => deleteCat(c.id)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
-              ))}
+              {categoryTree.income.map(c => renderCategoryItem(c))}
             </div>
           </div>
 
           <div>
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Expenses</h3>
             <div className="space-y-1">
-              {expenseCategories.map(c => (
-                <div key={c.id} className="card p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full" style={{ backgroundColor: c.color }} />
-                    <span className="font-medium text-sm">{c.name}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => openEditCat(c)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => deleteCat(c.id)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
-              ))}
+              {categoryTree.expense.map(c => renderCategoryItem(c))}
             </div>
           </div>
         </div>
@@ -222,6 +267,16 @@ export default function SettingsPage() {
               </select>
             </div>
           )}
+          <div>
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Parent Category (optional)</label>
+            <select value={catForm.parent_id} onChange={e => setCatForm({ ...catForm, parent_id: e.target.value })} className="input">
+              <option value="">None (top-level)</option>
+              {parentCategories
+                .filter(p => p.type === catForm.type && (!editingCat || p.id !== editingCat.id))
+                .map(p => <option key={p.id} value={p.id}>{p.name}</option>)
+              }
+            </select>
+          </div>
           <div>
             <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block flex items-center gap-1"><Palette className="w-4 h-4" /> Color</label>
             <div className="flex flex-wrap gap-2">
