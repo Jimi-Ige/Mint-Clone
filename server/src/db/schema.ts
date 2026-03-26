@@ -88,6 +88,31 @@ export async function initializeDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS recurring_patterns (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        description TEXT NOT NULL,
+        merchant_name TEXT,
+        amount NUMERIC(12,2) NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
+        category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+        account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+        frequency TEXT NOT NULL CHECK(frequency IN ('weekly', 'biweekly', 'monthly', 'quarterly', 'yearly')),
+        avg_amount NUMERIC(12,2) NOT NULL,
+        last_date DATE NOT NULL,
+        next_expected DATE NOT NULL,
+        confidence NUMERIC(4,2) NOT NULL DEFAULT 0,
+        occurrence_count INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused', 'dismissed')),
+        auto_detected BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_recurring_user ON recurring_patterns(user_id);
+      CREATE INDEX IF NOT EXISTS idx_recurring_next ON recurring_patterns(next_expected);
+      CREATE INDEX IF NOT EXISTS idx_recurring_status ON recurring_patterns(user_id, status);
+
       CREATE INDEX IF NOT EXISTS idx_institutions_user ON institutions(user_id);
       CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
       CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category_id);

@@ -14,6 +14,7 @@ import budgetsRouter from './routes/budgets';
 import goalsRouter from './routes/goals';
 import dashboardRouter from './routes/dashboard';
 import plaidRouter from './routes/plaid';
+import recurringRouter from './routes/recurring';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -56,6 +57,7 @@ app.use('/api/budgets', authMiddleware, budgetsRouter);
 app.use('/api/goals', authMiddleware, goalsRouter);
 app.use('/api/dashboard', authMiddleware, dashboardRouter);
 app.use('/api/plaid', authMiddleware, plaidRouter);
+app.use('/api/recurring', authMiddleware, recurringRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');

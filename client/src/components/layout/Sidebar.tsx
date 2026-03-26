@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ArrowLeftRight, Wallet, Target, Settings, ChevronLeft, ChevronRight, Leaf, X } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, Wallet, Target, Repeat, Settings, ChevronLeft, ChevronRight, Leaf, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const navItems = [
@@ -7,6 +7,7 @@ const navItems = [
   { to: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
   { to: '/budget', icon: Wallet, label: 'Budget' },
   { to: '/goals', icon: Target, label: 'Goals' },
+  { to: '/recurring', icon: Repeat, label: 'Bills' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

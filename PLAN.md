@@ -156,11 +156,15 @@ React SPA (Vite)  →  Azure App Service (Express API)  →  Azure PostgreSQL
 
 ---
 
-## v2 Backlog (Future)
-- Transfer detection between accounts
-- Hierarchical subcategory taxonomy
-- Tag system (travel, recurring, refund, etc.)
-- Recurring transaction detection + bill reminders
-- Net worth tracking over time
-- Multi-currency support
-- Mobile-first responsive redesign
+## v2 Roadmap
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| v2.1 | Azure Deployment (Bicep + CI/CD) | Done |
+| v2.2 | Mobile-responsive redesign | Done |
+| v2.3 | Recurring transaction detection + bill reminders | Done |
+| v2.4 | Transfer detection between accounts | Next |
+| v2.5 | Net worth tracking over time | Planned |
+| v2.6 | Tag system (travel, recurring, refund) | Planned |
+| v2.7 | Hierarchical subcategory taxonomy | Planned |
+| v2.8 | Multi-currency support | Planned |
