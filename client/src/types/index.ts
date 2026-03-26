@@ -74,6 +74,14 @@ export interface SavingsGoal {
   created_at: string;
 }
 
+export interface BalanceSnapshot {
+  date: string;
+  total_balance: number;
+  total_assets: number;
+  total_liabilities: number;
+  account_balances: Array<{ id: number; name: string; type: string; balance: number }>;
+}
+
 export interface Transfer {
   id: number;
   description: string;
