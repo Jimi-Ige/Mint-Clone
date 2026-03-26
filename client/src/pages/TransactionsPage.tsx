@@ -396,7 +396,7 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
                   <span className={`font-semibold text-sm ${tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, tx.account_currency)}
                   </span>
                   <div className="hidden sm:flex items-center gap-1">
                     <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">

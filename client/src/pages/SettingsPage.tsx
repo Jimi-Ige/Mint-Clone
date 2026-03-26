@@ -1,19 +1,26 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
-import { Category, Account, Institution, Tag } from '../types';
+import { Category, Account, Institution, Tag, CurrencyInfo } from '../types';
 import Modal from '../components/ui/Modal';
-import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown, Globe } from 'lucide-react';
 import PlaidLinkButton from '../components/settings/PlaidLink';
 import ConnectedAccounts from '../components/settings/ConnectedAccounts';
+import { useAuth } from '../context/AuthContext';
 
 const colorOptions = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#0ea5e9', '#a855f7', '#f43f5e'];
 
 export default function SettingsPage() {
+  const { user, updateBaseCurrency } = useAuth();
   const { data: categories, refetch: refetchCats } = useApi<Category[]>('/categories');
   const { data: accounts, refetch: refetchAccounts } = useApi<Account[]>('/accounts');
   const { data: institutions, refetch: refetchInstitutions } = useApi<Institution[]>('/plaid/institutions');
   const { data: tags, refetch: refetchTags } = useApi<Tag[]>('/tags');
+  const [currencies, setCurrencies] = useState<CurrencyInfo[]>([]);
+
+  useEffect(() => {
+    api.get<CurrencyInfo[]>('/currency/supported').then(setCurrencies).catch(() => {});
+  }, []);
 
   const handlePlaidSuccess = () => {
     refetchInstitutions();
@@ -23,7 +30,7 @@ export default function SettingsPage() {
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [catForm, setCatForm] = useState({ name: '', type: 'expense', color: '#10b981', parent_id: '' });
   const [accModal, setAccModal] = useState(false);
-  const [accForm, setAccForm] = useState({ name: '', type: 'checking' });
+  const [accForm, setAccForm] = useState({ name: '', type: 'checking', currency: 'USD' });
   const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set());
 
   const openNewCat = () => { setEditingCat(null); setCatForm({ name: '', type: 'expense', color: '#10b981', parent_id: '' }); setCatModal(true); };
@@ -52,6 +59,11 @@ export default function SettingsPage() {
   };
 
   const deleteAcc = async (id: number) => { await api.delete(`/accounts/${id}`); refetchAccounts(); };
+
+  const handleBaseCurrencyChange = async (currency: string) => {
+    await api.put('/currency/preference', { base_currency: currency });
+    updateBaseCurrency(currency);
+  };
 
   // Tag management state
   const [tagModal, setTagModal] = useState(false);
@@ -139,6 +151,27 @@ export default function SettingsPage() {
     <div className="space-y-6 md:space-y-8">
       <h1 className="text-xl md:text-2xl font-bold">Settings</h1>
 
+      {/* Display Currency */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2"><Globe className="w-5 h-5" /> Display Currency</h2>
+        </div>
+        <div className="card p-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+            All dashboard totals and reports will be converted to this currency. Account balances remain in their original currency.
+          </p>
+          <select
+            value={user?.base_currency || 'USD'}
+            onChange={e => handleBaseCurrencyChange(e.target.value)}
+            className="input w-full sm:w-auto"
+          >
+            {currencies.map(c => (
+              <option key={c.code} value={c.code}>{c.symbol} {c.code} — {c.name}</option>
+            ))}
+          </select>
+        </div>
+      </section>
+
       {/* Linked Bank Accounts (Plaid) */}
       <section>
         <div className="flex items-center justify-between mb-4">
@@ -152,7 +185,7 @@ export default function SettingsPage() {
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Manual Accounts</h2>
-          <button onClick={() => { setAccForm({ name: '', type: 'checking' }); setAccModal(true); }} className="btn-secondary flex items-center gap-2 text-sm">
+          <button onClick={() => { setAccForm({ name: '', type: 'checking', currency: user?.base_currency || 'USD' }); setAccModal(true); }} className="btn-secondary flex items-center gap-2 text-sm">
             <Plus className="w-4 h-4" /> Add Account
           </button>
         </div>
@@ -298,14 +331,24 @@ export default function SettingsPage() {
             <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Account Name</label>
             <input type="text" required value={accForm.name} onChange={e => setAccForm({ ...accForm, name: e.target.value })} className="input" />
           </div>
-          <div>
-            <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Account Type</label>
-            <select value={accForm.type} onChange={e => setAccForm({ ...accForm, type: e.target.value })} className="input">
-              <option value="checking">Checking</option>
-              <option value="savings">Savings</option>
-              <option value="credit">Credit Card</option>
-              <option value="investment">Investment</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Account Type</label>
+              <select value={accForm.type} onChange={e => setAccForm({ ...accForm, type: e.target.value })} className="input">
+                <option value="checking">Checking</option>
+                <option value="savings">Savings</option>
+                <option value="credit">Credit Card</option>
+                <option value="investment">Investment</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Currency</label>
+              <select value={accForm.currency} onChange={e => setAccForm({ ...accForm, currency: e.target.value })} className="input">
+                {currencies.map(c => (
+                  <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
+                ))}
+              </select>
+            </div>
           </div>
           <button type="submit" className="btn-primary w-full">Create Account</button>
         </form>

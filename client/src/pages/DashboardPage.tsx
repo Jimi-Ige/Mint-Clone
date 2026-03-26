@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { DashboardData, Category, Account, RecurringPattern, BalanceSnapshot } from '../types';
 import { useApi } from '../hooks/useApi';
-import { formatCurrency } from '../lib/formatters';
+import { formatCurrency as formatCurrencyRaw } from '../lib/formatters';
+import { useAuth } from '../context/AuthContext';
 import { TrendingUp, TrendingDown, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Wallet, Filter, CalendarClock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -19,8 +20,15 @@ function getDefaultDateRange() {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const defaults = getDefaultDateRange();
+
+  // Currency-aware formatter: uses dashboard baseCurrency or user preference
+  const formatCurrency = useMemo(() => {
+    const currency = user?.base_currency || 'USD';
+    return (amount: number) => formatCurrencyRaw(amount, currency);
+  }, [user?.base_currency]);
 
   const [startDate, setStartDate] = useState(searchParams.get('startDate') || defaults.start);
   const [endDate, setEndDate] = useState(searchParams.get('endDate') || defaults.end);

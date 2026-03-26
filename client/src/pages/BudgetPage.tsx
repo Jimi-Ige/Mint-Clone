@@ -1,13 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
 import { Budget, Category } from '../types';
-import { formatCurrency, formatMonth } from '../lib/formatters';
+import { formatCurrency as formatCurrencyRaw, formatMonth } from '../lib/formatters';
 import ProgressBar from '../components/ui/ProgressBar';
 import Modal from '../components/ui/Modal';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function BudgetPage() {
+  const { user } = useAuth();
+  const formatCurrency = useCallback((amount: number) => formatCurrencyRaw(amount, user?.base_currency), [user?.base_currency]);
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
