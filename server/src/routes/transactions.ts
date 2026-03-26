@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
+import { categorizeTransactions, CATEGORIES } from '../services/categorization';
 
 const router = Router();
 
@@ -139,6 +140,102 @@ router.delete('/:id', async (req: AuthRequest, res) => {
   } finally {
     client.release();
   }
+});
+
+// GET /api/transactions/categories-ai — list available AI categories
+router.get('/categories-ai', (_req: AuthRequest, res) => {
+  res.json(CATEGORIES);
+});
+
+// POST /api/transactions/:id/categorize — categorize a single transaction
+router.post('/:id/categorize', async (req: AuthRequest, res) => {
+  const txResult = await pool.query(
+    'SELECT id, description, merchant_name, amount, type, date FROM transactions WHERE id = $1 AND user_id = $2',
+    [req.params.id, req.userId]
+  );
+  if (txResult.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
+
+  const tx = txResult.rows[0];
+  const results = await categorizeTransactions([{
+    id: tx.id,
+    description: tx.description,
+    merchant_name: tx.merchant_name,
+    amount: parseFloat(tx.amount),
+    type: tx.type,
+    date: tx.date,
+  }]);
+
+  const result = results[0];
+  await pool.query(
+    'UPDATE transactions SET ai_category = $1, ai_reason = $2 WHERE id = $3 AND user_id = $4',
+    [result.category, result.reason, req.params.id, req.userId]
+  );
+
+  res.json({ id: result.id, ai_category: result.category, ai_reason: result.reason });
+});
+
+// POST /api/transactions/categorize-bulk — categorize all uncategorized transactions
+router.post('/categorize-bulk', async (req: AuthRequest, res) => {
+  // Fetch uncategorized transactions (no ai_category and no manual_category)
+  const { rows: uncategorized } = await pool.query(
+    `SELECT id, description, merchant_name, amount, type, date
+     FROM transactions
+     WHERE user_id = $1 AND ai_category IS NULL AND manual_category IS NULL
+     ORDER BY date DESC
+     LIMIT 100`,
+    [req.userId]
+  );
+
+  if (uncategorized.length === 0) {
+    return res.json({ categorized: 0, message: 'No uncategorized transactions found' });
+  }
+
+  const txns = uncategorized.map((t: any) => ({
+    id: t.id,
+    description: t.description,
+    merchant_name: t.merchant_name,
+    amount: parseFloat(t.amount),
+    type: t.type,
+    date: t.date,
+  }));
+
+  // Process in batches of 10 to stay within rate limits
+  const BATCH_SIZE = 10;
+  let totalCategorized = 0;
+
+  for (let i = 0; i < txns.length; i += BATCH_SIZE) {
+    const batch = txns.slice(i, i + BATCH_SIZE);
+    const results = await categorizeTransactions(batch);
+
+    for (const result of results) {
+      await pool.query(
+        'UPDATE transactions SET ai_category = $1, ai_reason = $2 WHERE id = $3 AND user_id = $4',
+        [result.category, result.reason, result.id, req.userId]
+      );
+      totalCategorized++;
+    }
+
+    // Rate limit: pause between batches if more remain
+    if (i + BATCH_SIZE < txns.length) {
+      await new Promise(resolve => setTimeout(resolve, 6000));
+    }
+  }
+
+  res.json({ categorized: totalCategorized });
+});
+
+// PATCH /api/transactions/:id/manual-category — set manual category override
+router.patch('/:id/manual-category', async (req: AuthRequest, res) => {
+  const { category } = req.body;
+  if (!category) return res.status(400).json({ error: 'category is required' });
+
+  const { rowCount } = await pool.query(
+    'UPDATE transactions SET manual_category = $1 WHERE id = $2 AND user_id = $3',
+    [category, req.params.id, req.userId]
+  );
+  if (rowCount === 0) return res.status(404).json({ error: 'Transaction not found' });
+
+  res.json({ id: Number(req.params.id), manual_category: category });
 });
 
 export default router;

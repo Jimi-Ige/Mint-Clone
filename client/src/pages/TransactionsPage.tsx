@@ -4,7 +4,7 @@ import { formatCurrency, formatDate } from '../lib/formatters';
 import { Transaction, Category, Account } from '../types';
 import { useApi } from '../hooks/useApi';
 import Modal from '../components/ui/Modal';
-import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles } from 'lucide-react';
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -17,8 +17,16 @@ export default function TransactionsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
 
+  const [categorizing, setCategorizing] = useState(false);
+  const [categorizeResult, setCategorizeResult] = useState<string | null>(null);
+  const [aiCategories, setAiCategories] = useState<string[]>([]);
+
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
+
+  useEffect(() => {
+    api.get<string[]>('/transactions/categories-ai').then(setAiCategories).catch(() => {});
+  }, []);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -74,6 +82,29 @@ export default function TransactionsPage() {
     fetchTransactions();
   };
 
+  const handleAutoCategorize = async () => {
+    setCategorizing(true);
+    setCategorizeResult(null);
+    try {
+      const res = await api.post<{ categorized: number; message?: string }>('/transactions/categorize-bulk', {});
+      setCategorizeResult(res.message || `Categorized ${res.categorized} transactions`);
+      fetchTransactions();
+    } catch (err: any) {
+      setCategorizeResult(err.message);
+    } finally {
+      setCategorizing(false);
+    }
+  };
+
+  const handleManualCategory = async (txId: number, category: string) => {
+    await api.patch(`/transactions/${txId}/manual-category`, { category });
+    fetchTransactions();
+  };
+
+  const getEffectiveCategory = (tx: Transaction) => {
+    return tx.manual_category || tx.ai_category || tx.category_name || null;
+  };
+
   const totalPages = Math.ceil(total / 15);
   const filteredCategories = categories?.filter(c => !form.type || c.type === form.type) || [];
 
@@ -81,10 +112,23 @@ export default function TransactionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Transactions</h1>
-        <button onClick={openNew} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Transaction
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleAutoCategorize}
+            disabled={categorizing}
+            className="btn-secondary flex items-center gap-2 text-sm"
+          >
+            <Sparkles className={`w-4 h-4 ${categorizing ? 'animate-pulse' : ''}`} />
+            {categorizing ? 'Categorizing...' : 'Auto-Categorize'}
+          </button>
+          <button onClick={openNew} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Transaction
+          </button>
+        </div>
       </div>
+      {categorizeResult && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 -mt-3">{categorizeResult}</p>
+      )}
 
       {/* Filters */}
       <div className="card p-4 flex flex-wrap gap-3">
@@ -132,9 +176,31 @@ export default function TransactionsPage() {
                   </div>
                   <div>
                     <p className="font-medium text-sm">{tx.description || 'Untitled'}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {tx.category_name || 'Uncategorized'} &middot; {formatDate(tx.date)} &middot; {tx.account_name}
-                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      <span>{tx.category_name || 'Uncategorized'}</span>
+                      {(tx.ai_category || tx.manual_category) && (
+                        <>
+                          <span>&middot;</span>
+                          <select
+                            value={tx.manual_category || tx.ai_category || ''}
+                            onChange={e => handleManualCategory(tx.id, e.target.value)}
+                            className="bg-transparent text-xs border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 cursor-pointer hover:border-gray-400"
+                            title={tx.ai_reason ? `AI: ${tx.ai_reason}` : undefined}
+                          >
+                            {aiCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          {tx.ai_category && !tx.manual_category && (
+                            <span title={tx.ai_reason || 'AI categorized'}>
+                              <Sparkles className="w-3 h-3 text-purple-400" />
+                            </span>
+                          )}
+                        </>
+                      )}
+                      <span>&middot;</span>
+                      <span>{formatDate(tx.date)}</span>
+                      <span>&middot;</span>
+                      <span>{tx.account_name}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
