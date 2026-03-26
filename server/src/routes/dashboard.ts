@@ -1,80 +1,93 @@
 import { Router } from 'express';
-import db from '../db/connection';
+import pool from '../db/connection';
+import { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/', (_req, res) => {
+router.get('/', async (req: AuthRequest, res) => {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
-  const monthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
 
-  // Total balance across all accounts
-  const balanceResult = db.prepare('SELECT COALESCE(SUM(balance), 0) as total FROM accounts').get() as any;
+  // Total balance
+  const balanceResult = await pool.query(
+    'SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE user_id = $1', [req.userId]
+  );
 
   // This month's income
-  const incomeResult = db.prepare(`
+  const incomeResult = await pool.query(`
     SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-    WHERE type = 'income' AND strftime('%Y-%m', date) = ?
-  `).get(monthStr) as any;
+    WHERE user_id = $1 AND type = 'income' AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
+  `, [req.userId, currentMonth, currentYear]);
 
   // This month's expenses
-  const expenseResult = db.prepare(`
+  const expenseResult = await pool.query(`
     SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-    WHERE type = 'expense' AND strftime('%Y-%m', date) = ?
-  `).get(monthStr) as any;
+    WHERE user_id = $1 AND type = 'expense' AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
+  `, [req.userId, currentMonth, currentYear]);
 
-  // Spending by category (current month)
-  const spendingByCategory = db.prepare(`
+  // Spending by category
+  const { rows: spendingByCategory } = await pool.query(`
     SELECT c.name, c.color, c.icon, COALESCE(SUM(t.amount), 0) as amount
     FROM transactions t
     JOIN categories c ON t.category_id = c.id
-    WHERE t.type = 'expense' AND strftime('%Y-%m', t.date) = ?
-    GROUP BY c.id
+    WHERE t.user_id = $1 AND t.type = 'expense' AND EXTRACT(MONTH FROM t.date) = $2 AND EXTRACT(YEAR FROM t.date) = $3
+    GROUP BY c.id, c.name, c.color, c.icon
     ORDER BY amount DESC
-  `).all(monthStr);
+  `, [req.userId, currentMonth, currentYear]);
 
   // Monthly trend (last 6 months)
   const monthlyTrend = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(currentYear, currentMonth - 1 - i, 1);
-    const ms = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const m = d.getMonth() + 1;
+    const y = d.getFullYear();
     const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
-    const income = db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'income' AND strftime('%Y-%m', date) = ?
-    `).get(ms) as any;
+    const income = await pool.query(`
+      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
+      WHERE user_id = $1 AND type = 'income' AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
+    `, [req.userId, m, y]);
 
-    const expenses = db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'expense' AND strftime('%Y-%m', date) = ?
-    `).get(ms) as any;
+    const expenses = await pool.query(`
+      SELECT COALESCE(SUM(amount), 0) as total FROM transactions
+      WHERE user_id = $1 AND type = 'expense' AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3
+    `, [req.userId, m, y]);
 
-    monthlyTrend.push({ month: label, income: income.total, expenses: expenses.total });
+    monthlyTrend.push({
+      month: label,
+      income: parseFloat(income.rows[0].total),
+      expenses: parseFloat(expenses.rows[0].total),
+    });
   }
 
   // Recent transactions
-  const recentTransactions = db.prepare(`
+  const { rows: recentTransactions } = await pool.query(`
     SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     LEFT JOIN accounts a ON t.account_id = a.id
+    WHERE t.user_id = $1
     ORDER BY t.date DESC, t.created_at DESC
     LIMIT 8
-  `).all();
+  `, [req.userId]);
 
-  // Savings goals summary
-  const goals = db.prepare("SELECT * FROM savings_goals WHERE status = 'active' ORDER BY created_at DESC LIMIT 3").all();
+  // Active savings goals
+  const { rows: goals } = await pool.query(
+    "SELECT * FROM savings_goals WHERE user_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 3",
+    [req.userId]
+  );
 
-  const monthIncome = incomeResult.total;
-  const monthExpenses = expenseResult.total;
+  const monthIncome = parseFloat(incomeResult.rows[0].total);
+  const monthExpenses = parseFloat(expenseResult.rows[0].total);
   const savingsRate = monthIncome > 0 ? Math.round(((monthIncome - monthExpenses) / monthIncome) * 100) : 0;
 
   res.json({
-    totalBalance: balanceResult.total,
+    totalBalance: parseFloat(balanceResult.rows[0].total),
     monthIncome,
     monthExpenses,
     savingsRate,
-    spendingByCategory,
+    spendingByCategory: spendingByCategory.map(r => ({ ...r, amount: parseFloat(r.amount) })),
     monthlyTrend,
     recentTransactions,
     goals,

@@ -1,66 +1,73 @@
 import { Router } from 'express';
-import db from '../db/connection';
+import pool from '../db/connection';
+import { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/', (req, res) => {
+router.get('/', async (req: AuthRequest, res) => {
   const { month, year } = req.query;
   const m = month || new Date().getMonth() + 1;
   const y = year || new Date().getFullYear();
 
-  const budgets = db.prepare(`
+  const { rows } = await pool.query(`
     SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
       COALESCE((
         SELECT SUM(t.amount) FROM transactions t
         WHERE t.category_id = b.category_id AND t.type = 'expense'
-        AND CAST(strftime('%m', t.date) AS INTEGER) = b.month
-        AND CAST(strftime('%Y', t.date) AS INTEGER) = b.year
+        AND EXTRACT(MONTH FROM t.date) = b.month
+        AND EXTRACT(YEAR FROM t.date) = b.year
       ), 0) as spent
     FROM budgets b
     LEFT JOIN categories c ON b.category_id = c.id
-    WHERE b.month = ? AND b.year = ?
+    WHERE b.user_id = $1 AND b.month = $2 AND b.year = $3
     ORDER BY c.name
-  `).all(m, y);
+  `, [req.userId, m, y]);
 
-  res.json(budgets);
+  res.json(rows);
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   const { category_id, amount, month, year } = req.body;
   if (!category_id || !amount || !month || !year) {
     return res.status(400).json({ error: 'category_id, amount, month, and year are required' });
   }
 
   try {
-    const result = db.prepare('INSERT INTO budgets (category_id, amount, month, year) VALUES (?, ?, ?, ?)').run(category_id, amount, month, year);
-    const budget = db.prepare(`
+    const { rows } = await pool.query(
+      'INSERT INTO budgets (user_id, category_id, amount, month, year) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.userId, category_id, amount, month, year]
+    );
+
+    const result = await pool.query(`
       SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color
-      FROM budgets b LEFT JOIN categories c ON b.category_id = c.id WHERE b.id = ?
-    `).get(result.lastInsertRowid);
-    res.status(201).json(budget);
+      FROM budgets b LEFT JOIN categories c ON b.category_id = c.id WHERE b.id = $1
+    `, [rows[0].id]);
+    res.status(201).json(result.rows[0]);
   } catch (err: any) {
-    if (err.message.includes('UNIQUE')) {
-      return res.status(409).json({ error: 'Budget already exists for this category and period' });
-    }
+    if (err.constraint) return res.status(409).json({ error: 'Budget already exists for this category and period' });
     throw err;
   }
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req: AuthRequest, res) => {
   const { amount } = req.body;
-  const budget = db.prepare('SELECT * FROM budgets WHERE id = ?').get(req.params.id);
-  if (!budget) return res.status(404).json({ error: 'Budget not found' });
+  const { rows } = await pool.query('SELECT * FROM budgets WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Budget not found' });
 
-  db.prepare('UPDATE budgets SET amount = ? WHERE id = ?').run(amount, req.params.id);
-  res.json(db.prepare(`
+  const result = await pool.query(`
+    UPDATE budgets SET amount = $1 WHERE id = $2 AND user_id = $3 RETURNING *
+  `, [amount, req.params.id, req.userId]);
+
+  const full = await pool.query(`
     SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color
-    FROM budgets b LEFT JOIN categories c ON b.category_id = c.id WHERE b.id = ?
-  `).get(req.params.id));
+    FROM budgets b LEFT JOIN categories c ON b.category_id = c.id WHERE b.id = $1
+  `, [result.rows[0].id]);
+  res.json(full.rows[0]);
 });
 
-router.delete('/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM budgets WHERE id = ?').run(req.params.id);
-  if (result.changes === 0) return res.status(404).json({ error: 'Budget not found' });
+router.delete('/:id', async (req: AuthRequest, res) => {
+  const { rowCount } = await pool.query('DELETE FROM budgets WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  if (rowCount === 0) return res.status(404).json({ error: 'Budget not found' });
   res.json({ success: true });
 });
 
