@@ -88,6 +88,24 @@ export async function initializeDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS tags (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '#6b7280',
+        UNIQUE(user_id, name)
+      );
+
+      CREATE TABLE IF NOT EXISTS transaction_tags (
+        transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (transaction_id, tag_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tags_user ON tags(user_id);
+      CREATE INDEX IF NOT EXISTS idx_transaction_tags_tx ON transaction_tags(transaction_id);
+      CREATE INDEX IF NOT EXISTS idx_transaction_tags_tag ON transaction_tags(tag_id);
+
       CREATE TABLE IF NOT EXISTS recurring_patterns (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -187,6 +205,24 @@ export async function seedUserData(userId: number) {
       await client.query(
         'INSERT INTO categories (user_id, name, type, icon, color) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
         [userId, name, type, icon, color]
+      );
+    }
+
+    // Seed default tags
+    const defaultTags = [
+      ['recurring', '#6366f1'],
+      ['transfer', '#3b82f6'],
+      ['refund', '#10b981'],
+      ['tax-deductible', '#f59e0b'],
+      ['travel', '#0ea5e9'],
+      ['business', '#8b5cf6'],
+      ['one-time', '#ec4899'],
+      ['essential', '#ef4444'],
+    ];
+    for (const [name, color] of defaultTags) {
+      await client.query(
+        'INSERT INTO tags (user_id, name, color) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [userId, name, color]
       );
     }
 

@@ -7,7 +7,7 @@ import { categorizeTransactions, CATEGORIES } from '../services/categorization';
 const router = Router();
 
 router.get('/', async (req: AuthRequest, res) => {
-  const { startDate, endDate, categoryId, type, search, page = '1', limit = '20' } = req.query;
+  const { startDate, endDate, categoryId, type, search, tagId, page = '1', limit = '20' } = req.query;
 
   let where = 'WHERE t.user_id = $1';
   const params: any[] = [req.userId];
@@ -18,6 +18,7 @@ router.get('/', async (req: AuthRequest, res) => {
   if (categoryId) { where += ` AND t.category_id = $${paramIdx++}`; params.push(categoryId); }
   if (type) { where += ` AND t.type = $${paramIdx++}`; params.push(type); }
   if (search) { where += ` AND t.description ILIKE $${paramIdx++}`; params.push(`%${search}%`); }
+  if (tagId) { where += ` AND EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag_id = $${paramIdx++})`; params.push(tagId); }
 
   const offset = (Number(page) - 1) * Number(limit);
 
@@ -25,7 +26,13 @@ router.get('/', async (req: AuthRequest, res) => {
 
   const txParams = [...params, Number(limit), offset];
   const { rows: transactions } = await pool.query(`
-    SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name
+    SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name,
+           COALESCE(
+             (SELECT json_agg(json_build_object('id', tg.id, 'name', tg.name, 'color', tg.color) ORDER BY tg.name)
+              FROM transaction_tags tt JOIN tags tg ON tt.tag_id = tg.id
+              WHERE tt.transaction_id = t.id),
+             '[]'::json
+           ) AS tags
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     LEFT JOIN accounts a ON t.account_id = a.id

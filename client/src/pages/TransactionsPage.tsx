@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { Transaction, Category, Account } from '../types';
+import { Transaction, Category, Account, Tag } from '../types';
 import { useApi } from '../hooks/useApi';
 import Modal from '../components/ui/Modal';
-import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight, Tag as TagIcon, X } from 'lucide-react';
 import CsvImport from '../components/transactions/CsvImport';
 
 export default function TransactionsPage() {
@@ -24,12 +24,16 @@ export default function TransactionsPage() {
   const [aiCategories, setAiCategories] = useState<string[]>([]);
   const [mobileActions, setMobileActions] = useState(false);
   const [detectingTransfers, setDetectingTransfers] = useState(false);
+  const [filterTag, setFilterTag] = useState('');
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [tagPopover, setTagPopover] = useState<number | null>(null);
 
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
 
   useEffect(() => {
     api.get<string[]>('/transactions/categories-ai').then(setAiCategories).catch(() => {});
+    api.get<Tag[]>('/tags').then(setAllTags).catch(() => {});
   }, []);
 
   const fetchTransactions = useCallback(async () => {
@@ -38,11 +42,12 @@ export default function TransactionsPage() {
     if (search) params.set('search', search);
     if (filterType) params.set('type', filterType);
     if (filterCategory) params.set('categoryId', filterCategory);
+    if (filterTag) params.set('tagId', filterTag);
     const res = await api.get<{ transactions: Transaction[]; total: number }>(`/transactions?${params}`);
     setTransactions(res.transactions);
     setTotal(res.total);
     setLoading(false);
-  }, [page, search, filterType, filterCategory]);
+  }, [page, search, filterType, filterCategory, filterTag]);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
 
@@ -122,6 +127,17 @@ export default function TransactionsPage() {
 
   const handleManualCategory = async (txId: number, category: string) => {
     await api.patch(`/transactions/${txId}/manual-category`, { category });
+    fetchTransactions();
+  };
+
+  const handleAddTag = async (txId: number, tagId: number) => {
+    await api.post(`/tags/transaction/${txId}`, { tag_id: tagId });
+    setTagPopover(null);
+    fetchTransactions();
+  };
+
+  const handleRemoveTag = async (txId: number, tagId: number) => {
+    await api.delete(`/tags/transaction/${txId}/${tagId}`);
     fetchTransactions();
   };
 
@@ -228,7 +244,7 @@ export default function TransactionsPage() {
             className="input pl-9"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
             <option value="">All Types</option>
             <option value="income">Income</option>
@@ -238,6 +254,12 @@ export default function TransactionsPage() {
             <option value="">All Categories</option>
             {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          {allTags.length > 0 && (
+            <select value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
+              <option value="">All Tags</option>
+              {allTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
@@ -293,6 +315,53 @@ export default function TransactionsPage() {
                       <span>{formatDate(tx.date)}</span>
                       <span className="hidden sm:inline">&middot;</span>
                       <span className="hidden sm:inline">{tx.account_name}</span>
+                      {tx.tags && tx.tags.length > 0 && tx.tags.map(tag => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                          style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
+                        >
+                          {tag.name}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRemoveTag(tx.id, tag.id); }}
+                            className="hover:opacity-70 hidden sm:inline"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                      {/* Add tag button */}
+                      <div className="relative hidden sm:inline-block">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setTagPopover(tagPopover === tx.id ? null : tx.id); }}
+                          className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400"
+                          title="Add tag"
+                        >
+                          <TagIcon className="w-3 h-3" />
+                        </button>
+                        {tagPopover === tx.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setTagPopover(null)} />
+                            <div className="absolute left-0 top-full mt-1 w-36 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1 max-h-40 overflow-auto">
+                              {allTags
+                                .filter(t => !tx.tags?.some(tt => tt.id === t.id))
+                                .map(t => (
+                                  <button
+                                    key={t.id}
+                                    onClick={(e) => { e.stopPropagation(); handleAddTag(tx.id, t.id); }}
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                                  >
+                                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                                    {t.name}
+                                  </button>
+                                ))}
+                              {allTags.filter(t => !tx.tags?.some(tt => tt.id === t.id)).length === 0 && (
+                                <p className="px-3 py-1.5 text-xs text-gray-400">All tags applied</p>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

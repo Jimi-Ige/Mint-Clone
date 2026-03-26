@@ -17,6 +17,7 @@ import plaidRouter from './routes/plaid';
 import recurringRouter from './routes/recurring';
 import transfersRouter from './routes/transfers';
 import snapshotsRouter from './routes/snapshots';
+import tagsRouter from './routes/tags';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -81,6 +82,7 @@ app.use('/api/plaid', authMiddleware, plaidRouter);
 app.use('/api/recurring', authMiddleware, recurringRouter);
 app.use('/api/transfers', authMiddleware, transfersRouter);
 app.use('/api/snapshots', authMiddleware, snapshotsRouter);
+app.use('/api/tags', authMiddleware, tagsRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');

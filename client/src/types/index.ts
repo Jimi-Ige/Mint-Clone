@@ -43,6 +43,7 @@ export interface Transaction {
   manual_category?: string;
   is_transfer?: boolean;
   transfer_pair_id?: number | null;
+  tags?: Tag[];
   created_at: string;
   category_name?: string;
   category_icon?: string;
@@ -72,6 +73,13 @@ export interface SavingsGoal {
   color: string;
   status: 'active' | 'completed' | 'cancelled';
   created_at: string;
+}
+
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  usage_count?: number;
 }
 
 export interface BalanceSnapshot {
