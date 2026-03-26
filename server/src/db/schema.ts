@@ -109,6 +109,20 @@ export async function initializeDatabase() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS balance_snapshots (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        total_balance NUMERIC(12,2) NOT NULL DEFAULT 0,
+        total_assets NUMERIC(12,2) NOT NULL DEFAULT 0,
+        total_liabilities NUMERIC(12,2) NOT NULL DEFAULT 0,
+        account_balances JSONB NOT NULL DEFAULT '[]',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, date)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_snapshots_user_date ON balance_snapshots(user_id, date);
+
       -- Transfer detection columns on transactions
       DO $$
       BEGIN

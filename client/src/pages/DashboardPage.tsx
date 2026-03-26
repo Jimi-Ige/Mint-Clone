@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { DashboardData, Category, Account, RecurringPattern } from '../types';
+import { DashboardData, Category, Account, RecurringPattern, BalanceSnapshot } from '../types';
 import { useApi } from '../hooks/useApi';
 import { formatCurrency } from '../lib/formatters';
 import { TrendingUp, TrendingDown, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Wallet, Filter, CalendarClock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
-  Tooltip, CartesianGrid, LineChart, Line, Legend,
+  Tooltip, CartesianGrid, LineChart, Line, Legend, Area, AreaChart,
 } from 'recharts';
 
 function getDefaultDateRange() {
@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [upcomingBills, setUpcomingBills] = useState<RecurringPattern[]>([]);
+  const [netWorthHistory, setNetWorthHistory] = useState<BalanceSnapshot[]>([]);
 
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
@@ -59,9 +60,10 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
-  // Fetch upcoming bills independently
+  // Fetch upcoming bills and net worth history independently
   useEffect(() => {
     api.get<RecurringPattern[]>('/recurring/upcoming?days=14').then(setUpcomingBills).catch(() => {});
+    api.get<BalanceSnapshot[]>('/snapshots/history?months=12').then(setNetWorthHistory).catch(() => {});
   }, []);
 
   // Persist filters in URL
@@ -210,6 +212,51 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Net Worth Trend */}
+      {netWorthHistory.length >= 2 && (
+        <div className="card p-4 md:p-5">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h2 className="text-base md:text-lg font-semibold">Net Worth Over Time</h2>
+            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-primary-500" /> Net Worth
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Assets
+              </span>
+              <span className="flex items-center gap-1 hidden sm:flex">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Liabilities
+              </span>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={netWorthHistory.map(s => ({
+              date: new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+              'Net Worth': s.total_balance,
+              Assets: s.total_assets,
+              Liabilities: s.total_liabilities,
+            }))}>
+              <defs>
+                <linearGradient id="netWorthGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+              <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} />
+              <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={50} />
+              <Tooltip
+                contentStyle={{ backgroundColor: 'var(--tooltip-bg, #fff)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
+                formatter={(value: number) => [formatCurrency(value)]}
+              />
+              <Area type="monotone" dataKey="Net Worth" stroke="#10b981" strokeWidth={2.5} fill="url(#netWorthGrad)" />
+              <Line type="monotone" dataKey="Assets" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5 5" dot={false} />
+              <Line type="monotone" dataKey="Liabilities" stroke="#f43f5e" strokeWidth={1.5} strokeDasharray="5 5" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">

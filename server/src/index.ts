@@ -16,6 +16,7 @@ import dashboardRouter from './routes/dashboard';
 import plaidRouter from './routes/plaid';
 import recurringRouter from './routes/recurring';
 import transfersRouter from './routes/transfers';
+import snapshotsRouter from './routes/snapshots';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -38,13 +39,32 @@ app.use(express.json());
 // Public auth routes (login, register)
 app.use('/api/auth', authRouter);
 
-// Protected: get current user
+// Protected: get current user (also captures daily balance snapshot)
 app.get('/api/auth/me', authMiddleware, async (req: any, res) => {
   try {
     const pool = (await import('./db/connection')).default;
     const result = await pool.query('SELECT id, email, name, created_at FROM users WHERE id = $1', [req.userId]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
+
+    // Fire-and-forget: capture daily balance snapshot
+    const today = new Date().toISOString().split('T')[0];
+    const existing = await pool.query(
+      'SELECT id FROM balance_snapshots WHERE user_id = $1 AND date = $2', [req.userId, today]
+    );
+    if (existing.rows.length === 0) {
+      const { rows: accounts } = await pool.query(
+        'SELECT id, name, type, balance FROM accounts WHERE user_id = $1', [req.userId]
+      );
+      const balances = accounts.map((a: any) => ({ id: a.id, name: a.name, type: a.type, balance: parseFloat(a.balance) }));
+      let assets = 0, liabilities = 0;
+      balances.forEach((a: any) => { if (a.type === 'credit') liabilities += Math.abs(a.balance); else assets += a.balance; });
+      await pool.query(
+        `INSERT INTO balance_snapshots (user_id, date, total_balance, total_assets, total_liabilities, account_balances)
+         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+        [req.userId, today, assets - liabilities, assets, liabilities, JSON.stringify(balances)]
+      ).catch(() => {}); // Silently ignore snapshot errors
+    }
   } catch {
     res.status(500).json({ error: 'Failed to fetch user' });
   }
@@ -60,6 +80,7 @@ app.use('/api/dashboard', authMiddleware, dashboardRouter);
 app.use('/api/plaid', authMiddleware, plaidRouter);
 app.use('/api/recurring', authMiddleware, recurringRouter);
 app.use('/api/transfers', authMiddleware, transfersRouter);
+app.use('/api/snapshots', authMiddleware, snapshotsRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');
