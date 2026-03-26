@@ -55,13 +55,18 @@ router.get('/', async (req: AuthRequest, res) => {
     baseParams
   );
 
-  // Spending by category (filtered, excluding transfers)
+  // Spending by category (filtered, excluding transfers) — roll up subcategories into parents
   const { rows: spendingByCategory } = await pool.query(`
-    SELECT c.name, c.color, c.icon, COALESCE(SUM(t.amount), 0) as amount
+    SELECT
+      COALESCE(p.name, c.name) as name,
+      COALESCE(p.color, c.color) as color,
+      COALESCE(p.icon, c.icon) as icon,
+      COALESCE(SUM(t.amount), 0) as amount
     FROM transactions t
     JOIN categories c ON t.category_id = c.id
+    LEFT JOIN categories p ON c.parent_id = p.id
     WHERE ${fullFilter} AND t.type = 'expense' AND t.is_transfer = FALSE
-    GROUP BY c.id, c.name, c.color, c.icon
+    GROUP BY COALESCE(p.id, c.id), COALESCE(p.name, c.name), COALESCE(p.color, c.color), COALESCE(p.icon, c.icon)
     ORDER BY amount DESC
   `, baseParams);
 

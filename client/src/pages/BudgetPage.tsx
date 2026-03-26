@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
 import { Budget, Category } from '../types';
@@ -17,7 +17,22 @@ export default function BudgetPage() {
   const [editing, setEditing] = useState<Budget | null>(null);
   const [form, setForm] = useState({ category_id: '', amount: '' });
 
-  const expenseCategories = categories?.filter(c => c.type === 'expense') || [];
+  // Build grouped expense category options (parents + indented subcategories)
+  const expenseCategoryOptions = useMemo(() => {
+    if (!categories) return [];
+    const expenseCats = categories.filter(c => c.type === 'expense');
+    const parents = expenseCats.filter(c => !c.parent_id);
+    const children = expenseCats.filter(c => c.parent_id);
+    const options: { id: number; name: string; isParent: boolean }[] = [];
+    for (const p of parents) {
+      options.push({ id: p.id, name: p.name, isParent: true });
+      const subs = children.filter(c => c.parent_id === p.id);
+      for (const s of subs) {
+        options.push({ id: s.id, name: `  ${s.name}`, isParent: false });
+      }
+    }
+    return options;
+  }, [categories]);
   const totalBudget = budgets?.reduce((s, b) => s + b.amount, 0) || 0;
   const totalSpent = budgets?.reduce((s, b) => s + (b.spent || 0), 0) || 0;
 
@@ -133,7 +148,7 @@ export default function BudgetPage() {
               <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Category</label>
               <select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })} className="input" required>
                 <option value="">Select category</option>
-                {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {expenseCategoryOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
           )}

@@ -39,6 +39,7 @@ export async function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        parent_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
         name TEXT NOT NULL,
         type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
         icon TEXT NOT NULL DEFAULT 'circle',
@@ -141,6 +142,16 @@ export async function initializeDatabase() {
 
       CREATE INDEX IF NOT EXISTS idx_snapshots_user_date ON balance_snapshots(user_id, date);
 
+      -- Hierarchical categories: add parent_id column
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'categories' AND column_name = 'parent_id') THEN
+          ALTER TABLE categories ADD COLUMN parent_id INTEGER REFERENCES categories(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
+
       -- Transfer detection columns on transactions
       DO $$
       BEGIN
@@ -183,28 +194,67 @@ export async function seedUserData(userId: number) {
     const { rows } = await client.query('SELECT COUNT(*) as count FROM categories WHERE user_id = $1', [userId]);
     if (parseInt(rows[0].count) > 0) return;
 
-    const categories = [
-      ['Salary', 'income', 'banknote', '#10b981'],
-      ['Freelance', 'income', 'laptop', '#8b5cf6'],
-      ['Investments', 'income', 'trending-up', '#3b82f6'],
-      ['Other Income', 'income', 'plus-circle', '#6366f1'],
-      ['Groceries', 'expense', 'shopping-cart', '#f59e0b'],
-      ['Rent', 'expense', 'home', '#ef4444'],
-      ['Utilities', 'expense', 'zap', '#f97316'],
+    // Parent categories (no parent_id)
+    const parentCategories: [string, string, string, string][] = [
+      ['Income', 'income', 'wallet', '#10b981'],
+      ['Food & Drink', 'expense', 'utensils', '#f59e0b'],
+      ['Housing', 'expense', 'home', '#ef4444'],
       ['Transportation', 'expense', 'car', '#8b5cf6'],
       ['Entertainment', 'expense', 'film', '#ec4899'],
-      ['Dining Out', 'expense', 'utensils', '#f43f5e'],
-      ['Healthcare', 'expense', 'heart-pulse', '#14b8a6'],
+      ['Health', 'expense', 'heart-pulse', '#14b8a6'],
       ['Shopping', 'expense', 'shopping-bag', '#a855f7'],
       ['Education', 'expense', 'book-open', '#3b82f6'],
-      ['Subscriptions', 'expense', 'repeat', '#6366f1'],
+      ['Bills & Subscriptions', 'expense', 'repeat', '#6366f1'],
       ['Travel', 'expense', 'plane', '#0ea5e9'],
     ];
 
-    for (const [name, type, icon, color] of categories) {
-      await client.query(
-        'INSERT INTO categories (user_id, name, type, icon, color) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
+    const parentMap: Record<string, number> = {};
+    for (const [name, type, icon, color] of parentCategories) {
+      const result = await client.query(
+        'INSERT INTO categories (user_id, name, type, icon, color) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id',
         [userId, name, type, icon, color]
+      );
+      parentMap[name] = result.rows[0].id;
+    }
+
+    // Subcategories: [name, type, icon, color, parentName]
+    const subcategories: [string, string, string, string, string][] = [
+      ['Salary', 'income', 'banknote', '#10b981', 'Income'],
+      ['Freelance', 'income', 'laptop', '#8b5cf6', 'Income'],
+      ['Investments', 'income', 'trending-up', '#3b82f6', 'Income'],
+      ['Other Income', 'income', 'plus-circle', '#6366f1', 'Income'],
+      ['Groceries', 'expense', 'shopping-cart', '#f59e0b', 'Food & Drink'],
+      ['Dining Out', 'expense', 'utensils', '#f43f5e', 'Food & Drink'],
+      ['Coffee', 'expense', 'coffee', '#92400e', 'Food & Drink'],
+      ['Rent', 'expense', 'home', '#ef4444', 'Housing'],
+      ['Utilities', 'expense', 'zap', '#f97316', 'Housing'],
+      ['Home Insurance', 'expense', 'shield', '#dc2626', 'Housing'],
+      ['Gas', 'expense', 'fuel', '#7c3aed', 'Transportation'],
+      ['Public Transit', 'expense', 'train', '#6d28d9', 'Transportation'],
+      ['Parking', 'expense', 'square', '#5b21b6', 'Transportation'],
+      ['Movies & Games', 'expense', 'gamepad-2', '#ec4899', 'Entertainment'],
+      ['Streaming', 'expense', 'tv', '#db2777', 'Entertainment'],
+      ['Concerts & Events', 'expense', 'music', '#be185d', 'Entertainment'],
+      ['Doctor', 'expense', 'stethoscope', '#14b8a6', 'Health'],
+      ['Pharmacy', 'expense', 'pill', '#0d9488', 'Health'],
+      ['Gym', 'expense', 'dumbbell', '#0f766e', 'Health'],
+      ['Clothing', 'expense', 'shirt', '#a855f7', 'Shopping'],
+      ['Electronics', 'expense', 'smartphone', '#9333ea', 'Shopping'],
+      ['General Shopping', 'expense', 'shopping-bag', '#7e22ce', 'Shopping'],
+      ['Tuition', 'expense', 'graduation-cap', '#3b82f6', 'Education'],
+      ['Books & Courses', 'expense', 'book-open', '#2563eb', 'Education'],
+      ['Subscriptions', 'expense', 'repeat', '#6366f1', 'Bills & Subscriptions'],
+      ['Phone & Internet', 'expense', 'wifi', '#4f46e5', 'Bills & Subscriptions'],
+      ['Insurance', 'expense', 'shield-check', '#4338ca', 'Bills & Subscriptions'],
+      ['Flights', 'expense', 'plane', '#0ea5e9', 'Travel'],
+      ['Hotels', 'expense', 'bed', '#0284c7', 'Travel'],
+      ['Travel Activities', 'expense', 'map', '#0369a1', 'Travel'],
+    ];
+
+    for (const [name, type, icon, color, parentName] of subcategories) {
+      await client.query(
+        'INSERT INTO categories (user_id, parent_id, name, type, icon, color) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING',
+        [userId, parentMap[parentName], name, type, icon, color]
       );
     }
 

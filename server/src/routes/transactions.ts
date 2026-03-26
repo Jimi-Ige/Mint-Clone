@@ -15,7 +15,7 @@ router.get('/', async (req: AuthRequest, res) => {
 
   if (startDate) { where += ` AND t.date >= $${paramIdx++}`; params.push(startDate); }
   if (endDate) { where += ` AND t.date <= $${paramIdx++}`; params.push(endDate); }
-  if (categoryId) { where += ` AND t.category_id = $${paramIdx++}`; params.push(categoryId); }
+  if (categoryId) { where += ` AND t.category_id IN (SELECT id FROM categories WHERE (id = $${paramIdx} OR parent_id = $${paramIdx}) AND user_id = $1)`; params.push(categoryId); paramIdx++; }
   if (type) { where += ` AND t.type = $${paramIdx++}`; params.push(type); }
   if (search) { where += ` AND t.description ILIKE $${paramIdx++}`; params.push(`%${search}%`); }
   if (tagId) { where += ` AND EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag_id = $${paramIdx++})`; params.push(tagId); }
@@ -160,7 +160,7 @@ router.get('/export', async (req: AuthRequest, res) => {
 
   if (startDate) { where += ` AND t.date >= $${paramIdx++}`; params.push(startDate); }
   if (endDate) { where += ` AND t.date <= $${paramIdx++}`; params.push(endDate); }
-  if (categoryId) { where += ` AND t.category_id = $${paramIdx++}`; params.push(categoryId); }
+  if (categoryId) { where += ` AND t.category_id IN (SELECT id FROM categories WHERE (id = $${paramIdx} OR parent_id = $${paramIdx}) AND user_id = $1)`; params.push(categoryId); paramIdx++; }
   if (type) { where += ` AND t.type = $${paramIdx++}`; params.push(type); }
 
   const { rows } = await pool.query(`
