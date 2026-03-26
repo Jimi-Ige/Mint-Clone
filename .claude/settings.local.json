@@ -6,7 +6,9 @@
       "WebFetch(domain:sidbharath.com)",
       "Bash(npm install:*)",
       "mcp__Claude_Preview__preview_start",
-      "Bash(cd /c/Users/Jimii/OneDrive/Desktop/\"Mint Clone\")"
+      "Bash(cd /c/Users/Jimii/OneDrive/Desktop/\"Mint Clone\")",
+      "Bash(npx tsc:*)",
+      "Bash(gh pr:*)"
     ]
   }
 }

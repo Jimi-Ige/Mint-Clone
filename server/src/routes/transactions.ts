@@ -1,116 +1,144 @@
 import { Router } from 'express';
-import db from '../db/connection';
+import pool from '../db/connection';
+import { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/', (req, res) => {
+router.get('/', async (req: AuthRequest, res) => {
   const { startDate, endDate, categoryId, type, search, page = '1', limit = '20' } = req.query;
 
-  let where = 'WHERE 1=1';
-  const params: any[] = [];
+  let where = 'WHERE t.user_id = $1';
+  const params: any[] = [req.userId];
+  let paramIdx = 2;
 
-  if (startDate) { where += ' AND t.date >= ?'; params.push(startDate); }
-  if (endDate) { where += ' AND t.date <= ?'; params.push(endDate); }
-  if (categoryId) { where += ' AND t.category_id = ?'; params.push(categoryId); }
-  if (type) { where += ' AND t.type = ?'; params.push(type); }
-  if (search) { where += ' AND t.description LIKE ?'; params.push(`%${search}%`); }
+  if (startDate) { where += ` AND t.date >= $${paramIdx++}`; params.push(startDate); }
+  if (endDate) { where += ` AND t.date <= $${paramIdx++}`; params.push(endDate); }
+  if (categoryId) { where += ` AND t.category_id = $${paramIdx++}`; params.push(categoryId); }
+  if (type) { where += ` AND t.type = $${paramIdx++}`; params.push(type); }
+  if (search) { where += ` AND t.description ILIKE $${paramIdx++}`; params.push(`%${search}%`); }
 
   const offset = (Number(page) - 1) * Number(limit);
-  const countResult = db.prepare(`SELECT COUNT(*) as total FROM transactions t ${where}`).get(...params) as any;
 
-  const transactions = db.prepare(`
+  const countResult = await pool.query(`SELECT COUNT(*) as total FROM transactions t ${where}`, params);
+
+  const txParams = [...params, Number(limit), offset];
+  const { rows: transactions } = await pool.query(`
     SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     LEFT JOIN accounts a ON t.account_id = a.id
     ${where}
     ORDER BY t.date DESC, t.created_at DESC
-    LIMIT ? OFFSET ?
-  `).all(...params, Number(limit), offset);
+    LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+  `, txParams);
 
-  res.json({ transactions, total: countResult.total, page: Number(page), limit: Number(limit) });
+  res.json({ transactions, total: parseInt(countResult.rows[0].total), page: Number(page), limit: Number(limit) });
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   const { account_id, category_id, amount, type, description = '', date } = req.body;
   if (!account_id || !amount || !type || !date) {
     return res.status(400).json({ error: 'account_id, amount, type, and date are required' });
   }
 
-  const updateBalance = db.transaction(() => {
-    const result = db.prepare(
-      'INSERT INTO transactions (account_id, category_id, amount, type, description, date) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(account_id, category_id || null, amount, type, description, date);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Verify account belongs to user
+    const acc = await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, req.userId]);
+    if (acc.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Account not found' }); }
+
+    const result = await client.query(
+      'INSERT INTO transactions (user_id, account_id, category_id, amount, type, description, date) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [req.userId, account_id, category_id || null, amount, type, description, date]
+    );
 
     const balanceChange = type === 'income' ? amount : -amount;
-    db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').run(balanceChange, account_id);
+    await client.query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [balanceChange, account_id]);
 
-    return result;
-  });
+    await client.query('COMMIT');
 
-  const result = updateBalance();
-  const transaction = db.prepare(`
-    SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name
-    FROM transactions t
-    LEFT JOIN categories c ON t.category_id = c.id
-    LEFT JOIN accounts a ON t.account_id = a.id
-    WHERE t.id = ?
-  `).get(result.lastInsertRowid);
-  res.status(201).json(transaction);
+    const { rows } = await pool.query(`
+      SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name
+      FROM transactions t LEFT JOIN categories c ON t.category_id = c.id LEFT JOIN accounts a ON t.account_id = a.id
+      WHERE t.id = $1
+    `, [result.rows[0].id]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
-router.put('/:id', (req, res) => {
-  const old = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id) as any;
-  if (!old) return res.status(404).json({ error: 'Transaction not found' });
+router.put('/:id', async (req: AuthRequest, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  const { account_id, category_id, amount, type, description, date } = req.body;
+    const old = await client.query('SELECT * FROM transactions WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+    if (old.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Transaction not found' }); }
+    const prev = old.rows[0];
 
-  const updateTx = db.transaction(() => {
-    // Reverse old balance effect
-    const oldEffect = old.type === 'income' ? old.amount : -old.amount;
-    db.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').run(oldEffect, old.account_id);
+    const { account_id, category_id, amount, type, description, date } = req.body;
 
-    db.prepare(`
+    // Reverse old balance
+    const oldEffect = prev.type === 'income' ? Number(prev.amount) : -Number(prev.amount);
+    await client.query('UPDATE accounts SET balance = balance - $1 WHERE id = $2', [oldEffect, prev.account_id]);
+
+    await client.query(`
       UPDATE transactions SET
-        account_id = COALESCE(?, account_id),
-        category_id = COALESCE(?, category_id),
-        amount = COALESCE(?, amount),
-        type = COALESCE(?, type),
-        description = COALESCE(?, description),
-        date = COALESCE(?, date)
-      WHERE id = ?
-    `).run(account_id, category_id, amount, type, description, date, req.params.id);
+        account_id = COALESCE($1, account_id), category_id = COALESCE($2, category_id),
+        amount = COALESCE($3, amount), type = COALESCE($4, type),
+        description = COALESCE($5, description), date = COALESCE($6, date)
+      WHERE id = $7 AND user_id = $8
+    `, [account_id, category_id, amount, type, description, date, req.params.id, req.userId]);
 
-    // Apply new balance effect
-    const updated = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id) as any;
-    const newEffect = updated.type === 'income' ? updated.amount : -updated.amount;
-    db.prepare('UPDATE accounts SET balance = balance + ? WHERE id = ?').run(newEffect, updated.account_id);
-  });
+    // Apply new balance
+    const updated = await client.query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
+    const u = updated.rows[0];
+    const newEffect = u.type === 'income' ? Number(u.amount) : -Number(u.amount);
+    await client.query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [newEffect, u.account_id]);
 
-  updateTx();
+    await client.query('COMMIT');
 
-  const transaction = db.prepare(`
-    SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name
-    FROM transactions t
-    LEFT JOIN categories c ON t.category_id = c.id
-    LEFT JOIN accounts a ON t.account_id = a.id
-    WHERE t.id = ?
-  `).get(req.params.id);
-  res.json(transaction);
+    const { rows } = await pool.query(`
+      SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name
+      FROM transactions t LEFT JOIN categories c ON t.category_id = c.id LEFT JOIN accounts a ON t.account_id = a.id
+      WHERE t.id = $1
+    `, [req.params.id]);
+    res.json(rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
-router.delete('/:id', (req, res) => {
-  const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id) as any;
-  if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+router.delete('/:id', async (req: AuthRequest, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  const deleteTx = db.transaction(() => {
-    const effect = tx.type === 'income' ? tx.amount : -tx.amount;
-    db.prepare('UPDATE accounts SET balance = balance - ? WHERE id = ?').run(effect, tx.account_id);
-    db.prepare('DELETE FROM transactions WHERE id = ?').run(req.params.id);
-  });
+    const tx = await client.query('SELECT * FROM transactions WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+    if (tx.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Transaction not found' }); }
 
-  deleteTx();
-  res.json({ success: true });
+    const t = tx.rows[0];
+    const effect = t.type === 'income' ? Number(t.amount) : -Number(t.amount);
+    await client.query('UPDATE accounts SET balance = balance - $1 WHERE id = $2', [effect, t.account_id]);
+    await client.query('DELETE FROM transactions WHERE id = $1', [req.params.id]);
+
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
 export default router;
