@@ -72,6 +72,30 @@ export interface SavingsGoal {
   created_at: string;
 }
 
+export interface RecurringPattern {
+  id: number;
+  description: string;
+  merchant_name?: string;
+  amount: number;
+  type: 'income' | 'expense';
+  category_id: number | null;
+  account_id: number | null;
+  frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+  avg_amount: number;
+  last_date: string;
+  next_expected: string;
+  confidence: number;
+  occurrence_count: number;
+  status: 'active' | 'paused' | 'dismissed';
+  auto_detected: boolean;
+  category_name?: string;
+  category_color?: string;
+  category_icon?: string;
+  account_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DashboardData {
   totalBalance: number;
   monthIncome: number;

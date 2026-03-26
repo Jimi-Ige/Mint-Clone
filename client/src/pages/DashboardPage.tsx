@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { DashboardData, Category, Account } from '../types';
+import { DashboardData, Category, Account, RecurringPattern } from '../types';
 import { useApi } from '../hooks/useApi';
 import { formatCurrency } from '../lib/formatters';
-import { TrendingUp, TrendingDown, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Wallet, Filter } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Wallet, Filter, CalendarClock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
   Tooltip, CartesianGrid, LineChart, Line, Legend,
@@ -33,6 +34,7 @@ export default function DashboardPage() {
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [upcomingBills, setUpcomingBills] = useState<RecurringPattern[]>([]);
 
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
@@ -56,6 +58,11 @@ export default function DashboardPage() {
   }, [startDate, endDate, selectedAccounts, selectedCategories]);
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
+
+  // Fetch upcoming bills independently
+  useEffect(() => {
+    api.get<RecurringPattern[]>('/recurring/upcoming?days=14').then(setUpcomingBills).catch(() => {});
+  }, []);
 
   // Persist filters in URL
   useEffect(() => {
@@ -299,6 +306,38 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Upcoming Bills */}
+      {upcomingBills.length > 0 && (
+        <div className="card p-4 md:p-5">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
+              <CalendarClock className="w-5 h-5 text-amber-500" /> Upcoming Bills
+            </h2>
+            <Link to="/recurring" className="text-xs text-primary-500 hover:text-primary-600 font-medium">
+              View all
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {upcomingBills.slice(0, 5).map(bill => {
+              const daysUntil = Math.ceil((new Date(bill.next_expected).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+              const urgency = daysUntil < 0 ? 'text-rose-500 font-semibold' : daysUntil <= 3 ? 'text-amber-500 font-semibold' : 'text-gray-500 dark:text-gray-400';
+              const label = daysUntil < 0 ? 'Overdue' : daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `${daysUntil}d`;
+              return (
+                <div key={bill.id} className="flex items-center justify-between py-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`text-xs w-12 text-center ${urgency}`}>{label}</span>
+                    <span className="text-sm truncate">{bill.description}</span>
+                  </div>
+                  <span className={`font-semibold text-sm flex-shrink-0 ml-2 ${bill.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {bill.type === 'income' ? '+' : '-'}{formatCurrency(bill.avg_amount)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Recent Transactions */}
       <div className="card p-4 md:p-5">
