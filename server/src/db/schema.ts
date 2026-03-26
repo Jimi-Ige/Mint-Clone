@@ -59,6 +59,9 @@ export async function initializeDatabase() {
         plaid_transaction_id TEXT UNIQUE,
         plaid_category TEXT,
         pending BOOLEAN NOT NULL DEFAULT FALSE,
+        ai_category TEXT,
+        ai_reason TEXT,
+        manual_category TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 

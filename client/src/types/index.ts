@@ -38,6 +38,9 @@ export interface Transaction {
   plaid_transaction_id?: string;
   plaid_category?: string;
   pending?: boolean;
+  ai_category?: string;
+  ai_reason?: string;
+  manual_category?: string;
   created_at: string;
   category_name?: string;
   category_icon?: string;
