@@ -12,13 +12,27 @@ export async function initializeDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS institutions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        plaid_access_token TEXT NOT NULL,
+        plaid_item_id TEXT UNIQUE NOT NULL,
+        cursor TEXT,
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'error', 'login_required')),
+        last_sync TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS accounts (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        institution_id INTEGER REFERENCES institutions(id) ON DELETE SET NULL,
         name TEXT NOT NULL,
         type TEXT NOT NULL DEFAULT 'checking',
         balance NUMERIC(12,2) NOT NULL DEFAULT 0,
         currency TEXT NOT NULL DEFAULT 'USD',
+        plaid_account_id TEXT UNIQUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
@@ -41,6 +55,10 @@ export async function initializeDatabase() {
         type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
         description TEXT NOT NULL DEFAULT '',
         date DATE NOT NULL,
+        merchant_name TEXT,
+        plaid_transaction_id TEXT UNIQUE,
+        plaid_category TEXT,
+        pending BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
@@ -67,10 +85,12 @@ export async function initializeDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      CREATE INDEX IF NOT EXISTS idx_institutions_user ON institutions(user_id);
       CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
       CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category_id);
       CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
       CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_transactions_plaid_id ON transactions(plaid_transaction_id);
       CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
       CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
       CREATE INDEX IF NOT EXISTS idx_budgets_user ON budgets(user_id);

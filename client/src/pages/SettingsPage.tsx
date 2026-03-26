@@ -1,15 +1,23 @@
 import { useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
-import { Category, Account } from '../types';
+import { Category, Account, Institution } from '../types';
 import Modal from '../components/ui/Modal';
 import { Plus, Trash2, Edit2, Palette } from 'lucide-react';
+import PlaidLinkButton from '../components/settings/PlaidLink';
+import ConnectedAccounts from '../components/settings/ConnectedAccounts';
 
 const colorOptions = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#0ea5e9', '#a855f7', '#f43f5e'];
 
 export default function SettingsPage() {
   const { data: categories, refetch: refetchCats } = useApi<Category[]>('/categories');
   const { data: accounts, refetch: refetchAccounts } = useApi<Account[]>('/accounts');
+  const { data: institutions, refetch: refetchInstitutions } = useApi<Institution[]>('/plaid/institutions');
+
+  const handlePlaidSuccess = () => {
+    refetchInstitutions();
+    refetchAccounts();
+  };
   const [catModal, setCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [catForm, setCatForm] = useState({ name: '', type: 'expense', color: '#10b981' });
@@ -45,10 +53,19 @@ export default function SettingsPage() {
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Settings</h1>
 
-      {/* Accounts */}
+      {/* Linked Bank Accounts (Plaid) */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Accounts</h2>
+          <h2 className="text-lg font-semibold">Linked Bank Accounts</h2>
+          <PlaidLinkButton onSuccess={handlePlaidSuccess} />
+        </div>
+        <ConnectedAccounts institutions={institutions || []} onRefresh={handlePlaidSuccess} />
+      </section>
+
+      {/* Manual Accounts */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Manual Accounts</h2>
           <button onClick={() => { setAccForm({ name: '', type: 'checking' }); setAccModal(true); }} className="btn-secondary flex items-center gap-2 text-sm">
             <Plus className="w-4 h-4" /> Add Account
           </button>

@@ -13,6 +13,7 @@ import transactionsRouter from './routes/transactions';
 import budgetsRouter from './routes/budgets';
 import goalsRouter from './routes/goals';
 import dashboardRouter from './routes/dashboard';
+import plaidRouter from './routes/plaid';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -54,6 +55,7 @@ app.use('/api/transactions', authMiddleware, transactionsRouter);
 app.use('/api/budgets', authMiddleware, budgetsRouter);
 app.use('/api/goals', authMiddleware, goalsRouter);
 app.use('/api/dashboard', authMiddleware, dashboardRouter);
+app.use('/api/plaid', authMiddleware, plaidRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');
