@@ -104,6 +104,16 @@ export async function initializeDatabase() {
         PRIMARY KEY (transaction_id, tag_id)
       );
 
+      CREATE TABLE IF NOT EXISTS filter_presets (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        filters JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(user_id, name)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_filter_presets_user ON filter_presets(user_id);
       CREATE INDEX IF NOT EXISTS idx_tags_user ON tags(user_id);
       CREATE INDEX IF NOT EXISTS idx_transaction_tags_tx ON transaction_tags(transaction_id);
       CREATE INDEX IF NOT EXISTS idx_transaction_tags_tag ON transaction_tags(tag_id);
@@ -197,6 +207,7 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id);
       CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
       CREATE INDEX IF NOT EXISTS idx_transactions_plaid_id ON transactions(plaid_transaction_id);
+      CREATE INDEX IF NOT EXISTS idx_transactions_amount ON transactions(amount);
       CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
       CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id);
       CREATE INDEX IF NOT EXISTS idx_budgets_user ON budgets(user_id);

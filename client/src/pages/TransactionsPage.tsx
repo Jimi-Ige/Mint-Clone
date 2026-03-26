@@ -1,20 +1,24 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { Transaction, Category, Account, Tag } from '../types';
+import { Transaction, Category, Account, Tag, FilterPreset, TransactionFilters } from '../types';
 import { useApi } from '../hooks/useApi';
 import Modal from '../components/ui/Modal';
-import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight, Tag as TagIcon, X } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight, Tag as TagIcon, X, SlidersHorizontal, Save, ChevronDown, ChevronUp, ArrowUpDown, Calendar, DollarSign, Bookmark } from 'lucide-react';
 import CsvImport from '../components/transactions/CsvImport';
+
+const defaultFilters: TransactionFilters = {
+  search: '', type: '', categoryId: '', tagId: '', accountId: '',
+  startDate: '', endDate: '', amountMin: '', amountMax: '', isTransfer: '', sort: 'date_desc',
+};
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
+  const [filters, setFilters] = useState<TransactionFilters>({ ...defaultFilters });
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
 
@@ -24,9 +28,14 @@ export default function TransactionsPage() {
   const [aiCategories, setAiCategories] = useState<string[]>([]);
   const [mobileActions, setMobileActions] = useState(false);
   const [detectingTransfers, setDetectingTransfers] = useState(false);
-  const [filterTag, setFilterTag] = useState('');
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [tagPopover, setTagPopover] = useState<number | null>(null);
+
+  // Saved presets
+  const [presets, setPresets] = useState<FilterPreset[]>([]);
+  const [savePresetName, setSavePresetName] = useState('');
+  const [showPresetSave, setShowPresetSave] = useState(false);
+  const [showPresetList, setShowPresetList] = useState(false);
 
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
@@ -34,22 +43,76 @@ export default function TransactionsPage() {
   useEffect(() => {
     api.get<string[]>('/transactions/categories-ai').then(setAiCategories).catch(() => {});
     api.get<Tag[]>('/tags').then(setAllTags).catch(() => {});
+    api.get<FilterPreset[]>('/filter-presets').then(setPresets).catch(() => {});
   }, []);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: '15' });
-    if (search) params.set('search', search);
-    if (filterType) params.set('type', filterType);
-    if (filterCategory) params.set('categoryId', filterCategory);
-    if (filterTag) params.set('tagId', filterTag);
+    if (filters.search) params.set('search', filters.search);
+    if (filters.type) params.set('type', filters.type);
+    if (filters.categoryId) params.set('categoryId', filters.categoryId);
+    if (filters.tagId) params.set('tagId', filters.tagId);
+    if (filters.accountId) params.set('accountId', filters.accountId);
+    if (filters.startDate) params.set('startDate', filters.startDate);
+    if (filters.endDate) params.set('endDate', filters.endDate);
+    if (filters.amountMin) params.set('amountMin', filters.amountMin);
+    if (filters.amountMax) params.set('amountMax', filters.amountMax);
+    if (filters.isTransfer) params.set('isTransfer', filters.isTransfer);
+    if (filters.sort && filters.sort !== 'date_desc') params.set('sort', filters.sort);
     const res = await api.get<{ transactions: Transaction[]; total: number }>(`/transactions?${params}`);
     setTransactions(res.transactions);
     setTotal(res.total);
     setLoading(false);
-  }, [page, search, filterType, filterCategory, filterTag]);
+  }, [page, filters]);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
+
+  const updateFilter = (key: keyof TransactionFilters, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setFilters({ ...defaultFilters });
+    setPage(1);
+  };
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.type) count++;
+    if (filters.categoryId) count++;
+    if (filters.tagId) count++;
+    if (filters.accountId) count++;
+    if (filters.startDate || filters.endDate) count++;
+    if (filters.amountMin || filters.amountMax) count++;
+    if (filters.isTransfer) count++;
+    return count;
+  }, [filters]);
+
+  // Preset handlers
+  const handleSavePreset = async () => {
+    if (!savePresetName.trim()) return;
+    try {
+      const preset = await api.post<FilterPreset>('/filter-presets', { name: savePresetName.trim(), filters });
+      setPresets(prev => [...prev, preset]);
+      setSavePresetName('');
+      setShowPresetSave(false);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleLoadPreset = (preset: FilterPreset) => {
+    setFilters({ ...defaultFilters, ...preset.filters });
+    setPage(1);
+    setShowPresetList(false);
+  };
+
+  const handleDeletePreset = async (id: number) => {
+    await api.delete(`/filter-presets/${id}`);
+    setPresets(prev => prev.filter(p => p.id !== id));
+  };
 
   const [form, setForm] = useState({
     account_id: '', category_id: '', amount: '', type: 'expense', description: '', date: new Date().toISOString().split('T')[0],
@@ -93,9 +156,11 @@ export default function TransactionsPage() {
 
   const handleExport = () => {
     const params = new URLSearchParams();
-    if (search) params.set('search', search);
-    if (filterType) params.set('type', filterType);
-    if (filterCategory) params.set('categoryId', filterCategory);
+    if (filters.search) params.set('search', filters.search);
+    if (filters.type) params.set('type', filters.type);
+    if (filters.categoryId) params.set('categoryId', filters.categoryId);
+    if (filters.startDate) params.set('startDate', filters.startDate);
+    if (filters.endDate) params.set('endDate', filters.endDate);
     const token = localStorage.getItem('token');
     fetch(`/api/transactions/export?${params}`, {
       headers: { Authorization: `Bearer ${token || ''}` },
@@ -171,7 +236,6 @@ export default function TransactionsPage() {
         options.push({ id: s.id, name: `  ${s.name}`, isParent: false, type: s.type });
       }
     }
-    // Add any orphaned children (shouldn't happen but be safe)
     const parentIds = new Set(parents.map(p => p.id));
     for (const c of children) {
       if (!parentIds.has(c.parent_id!)) {
@@ -182,6 +246,14 @@ export default function TransactionsPage() {
   }, [categories]);
 
   const filteredGroupedCategories = groupedCategoryOptions.filter(c => !form.type || c.type === form.type);
+
+  const sortLabel: Record<string, string> = {
+    date_desc: 'Newest first',
+    date_asc: 'Oldest first',
+    amount_desc: 'Highest amount',
+    amount_asc: 'Lowest amount',
+    description_asc: 'A-Z',
+  };
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -197,19 +269,11 @@ export default function TransactionsPage() {
           <button onClick={() => setImportOpen(true)} className="btn-secondary flex items-center gap-2 text-sm">
             <Upload className="w-4 h-4" /> Import
           </button>
-          <button
-            onClick={handleAutoCategorize}
-            disabled={categorizing}
-            className="btn-secondary flex items-center gap-2 text-sm"
-          >
+          <button onClick={handleAutoCategorize} disabled={categorizing} className="btn-secondary flex items-center gap-2 text-sm">
             <Sparkles className={`w-4 h-4 ${categorizing ? 'animate-pulse' : ''}`} />
             {categorizing ? 'Categorizing...' : 'Auto-Categorize'}
           </button>
-          <button
-            onClick={handleDetectTransfers}
-            disabled={detectingTransfers}
-            className="btn-secondary flex items-center gap-2 text-sm"
-          >
+          <button onClick={handleDetectTransfers} disabled={detectingTransfers} className="btn-secondary flex items-center gap-2 text-sm">
             <ArrowLeftRight className={`w-4 h-4 ${detectingTransfers ? 'animate-pulse' : ''}`} />
             {detectingTransfers ? 'Detecting...' : 'Detect Transfers'}
           </button>
@@ -220,14 +284,9 @@ export default function TransactionsPage() {
 
         {/* Mobile actions */}
         <div className="flex sm:hidden items-center gap-2">
-          <button onClick={openNew} className="btn-primary p-2">
-            <Plus className="w-5 h-5" />
-          </button>
+          <button onClick={openNew} className="btn-primary p-2"><Plus className="w-5 h-5" /></button>
           <div className="relative">
-            <button
-              onClick={() => setMobileActions(!mobileActions)}
-              className="btn-secondary p-2"
-            >
+            <button onClick={() => setMobileActions(!mobileActions)} className="btn-secondary p-2">
               <MoreHorizontal className="w-5 h-5" />
             </button>
             {mobileActions && (
@@ -258,38 +317,170 @@ export default function TransactionsPage() {
       )}
 
       {/* Filters */}
-      <div className="card p-3 md:p-4 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search transactions..."
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            className="input pl-9"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
-            <option value="">All Types</option>
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-          </select>
-          <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
-            <option value="">All Categories</option>
-            {groupedCategoryOptions.map(c => (
-              <option key={c.id} value={c.id} className={c.isParent ? 'font-semibold' : ''}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          {allTags.length > 0 && (
-            <select value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
-              <option value="">All Tags</option>
-              {allTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+      <div className="card p-3 md:p-4 space-y-3">
+        {/* Search + quick filters row */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search description or merchant..."
+              value={filters.search || ''}
+              onChange={e => updateFilter('search', e.target.value)}
+              className="input pl-9"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <select value={filters.type || ''} onChange={e => updateFilter('type', e.target.value)} className="input w-full sm:w-auto">
+              <option value="">All Types</option>
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
             </select>
-          )}
+            <select value={filters.categoryId || ''} onChange={e => updateFilter('categoryId', e.target.value)} className="input w-full sm:w-auto">
+              <option value="">All Categories</option>
+              {groupedCategoryOptions.map(c => (
+                <option key={c.id} value={c.id} className={c.isParent ? 'font-semibold' : ''}>{c.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className={`btn-secondary flex items-center gap-1.5 text-sm ${activeFilterCount > 0 ? 'ring-2 ring-primary-500/30' : ''}`}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span className="hidden sm:inline">Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-primary-500 text-white text-xs flex items-center justify-center">{activeFilterCount}</span>
+              )}
+              {showAdvanced ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          </div>
         </div>
+
+        {/* Advanced filters panel */}
+        {showAdvanced && (
+          <div className="border-t border-gray-100 dark:border-gray-700/50 pt-3 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Date range */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1"><Calendar className="w-3 h-3" /> Start Date</label>
+                <input type="date" value={filters.startDate || ''} onChange={e => updateFilter('startDate', e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1"><Calendar className="w-3 h-3" /> End Date</label>
+                <input type="date" value={filters.endDate || ''} onChange={e => updateFilter('endDate', e.target.value)} className="input" />
+              </div>
+              {/* Amount range */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Min Amount</label>
+                <input type="number" step="0.01" min="0" placeholder="0.00" value={filters.amountMin || ''} onChange={e => updateFilter('amountMin', e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Max Amount</label>
+                <input type="number" step="0.01" min="0" placeholder="No limit" value={filters.amountMax || ''} onChange={e => updateFilter('amountMax', e.target.value)} className="input" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Account */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Account</label>
+                <select value={filters.accountId || ''} onChange={e => updateFilter('accountId', e.target.value)} className="input">
+                  <option value="">All Accounts</option>
+                  {accounts?.map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
+                </select>
+              </div>
+              {/* Tag */}
+              {allTags.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Tag</label>
+                  <select value={filters.tagId || ''} onChange={e => updateFilter('tagId', e.target.value)} className="input">
+                    <option value="">All Tags</option>
+                    {allTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {/* Transfer filter */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Transfers</label>
+                <select value={filters.isTransfer || ''} onChange={e => updateFilter('isTransfer', e.target.value)} className="input">
+                  <option value="">All</option>
+                  <option value="true">Transfers only</option>
+                  <option value="false">Exclude transfers</option>
+                </select>
+              </div>
+              {/* Sort */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1"><ArrowUpDown className="w-3 h-3" /> Sort</label>
+                <select value={filters.sort || 'date_desc'} onChange={e => updateFilter('sort', e.target.value)} className="input">
+                  {Object.entries(sortLabel).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Filter actions */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+              <div className="flex items-center gap-2">
+                <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                  Clear all filters
+                </button>
+                {activeFilterCount > 0 && (
+                  <span className="text-xs text-gray-400">({activeFilterCount} active)</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Load preset */}
+                <div className="relative">
+                  <button onClick={() => { setShowPresetList(!showPresetList); setShowPresetSave(false); }} className="btn-secondary flex items-center gap-1.5 text-sm">
+                    <Bookmark className="w-3.5 h-3.5" /> Presets
+                  </button>
+                  {showPresetList && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowPresetList(false)} />
+                      <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1 max-h-60 overflow-auto">
+                        {presets.length === 0 ? (
+                          <p className="px-4 py-3 text-sm text-gray-400">No saved presets</p>
+                        ) : presets.map(p => (
+                          <div key={p.id} className="flex items-center justify-between px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <button onClick={() => handleLoadPreset(p)} className="text-sm text-left flex-1 truncate">{p.name}</button>
+                            <button onClick={() => handleDeletePreset(p.id)} className="p-1 text-gray-400 hover:text-red-500 flex-shrink-0">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {/* Save preset */}
+                <div className="relative">
+                  <button onClick={() => { setShowPresetSave(!showPresetSave); setShowPresetList(false); }} className="btn-secondary flex items-center gap-1.5 text-sm">
+                    <Save className="w-3.5 h-3.5" /> Save
+                  </button>
+                  {showPresetSave && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowPresetSave(false)} />
+                      <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-20 p-3">
+                        <input
+                          type="text"
+                          placeholder="Preset name..."
+                          value={savePresetName}
+                          onChange={e => setSavePresetName(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleSavePreset()}
+                          className="input text-sm mb-2"
+                          autoFocus
+                        />
+                        <button onClick={handleSavePreset} disabled={!savePresetName.trim()} className="btn-primary w-full text-sm">
+                          Save Preset
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Transaction List */}
@@ -299,7 +490,7 @@ export default function TransactionsPage() {
         ) : transactions.length === 0 ? (
           <div className="p-8 md:p-12 text-center text-gray-400">
             <p className="text-lg font-medium mb-1">No transactions found</p>
-            <p className="text-sm">Add your first transaction to get started</p>
+            <p className="text-sm">{activeFilterCount > 0 ? 'Try adjusting your filters' : 'Add your first transaction to get started'}</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
@@ -406,7 +597,6 @@ export default function TransactionsPage() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  {/* Mobile: tap row to edit */}
                   <button onClick={() => openEdit(tx)} className="sm:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
                     <Edit2 className="w-4 h-4" />
                   </button>
@@ -421,7 +611,6 @@ export default function TransactionsPage() {
           <div className="flex items-center justify-between p-3 md:p-4 border-t border-gray-100 dark:border-gray-700/50">
             <p className="text-xs md:text-sm text-gray-500">{total} transactions</p>
             <div className="flex gap-1">
-              {/* Show prev/next on mobile, page numbers on desktop */}
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
@@ -439,7 +628,6 @@ export default function TransactionsPage() {
               >
                 &rsaquo;
               </button>
-              {/* Desktop page numbers */}
               {Array.from({ length: totalPages }, (_, i) => (
                 <button
                   key={i}
@@ -494,7 +682,7 @@ export default function TransactionsPage() {
           <div>
             <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Account</label>
             <select value={form.account_id} onChange={e => setForm({ ...form, account_id: e.target.value })} className="input">
-              {accounts?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {accounts?.map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
             </select>
           </div>
           <button type="submit" className="btn-primary w-full">{editing ? 'Update' : 'Add'} Transaction</button>

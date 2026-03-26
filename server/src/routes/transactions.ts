@@ -7,7 +7,7 @@ import { categorizeTransactions, CATEGORIES } from '../services/categorization';
 const router = Router();
 
 router.get('/', async (req: AuthRequest, res) => {
-  const { startDate, endDate, categoryId, type, search, tagId, page = '1', limit = '20' } = req.query;
+  const { startDate, endDate, categoryId, type, search, tagId, accountId, amountMin, amountMax, isTransfer, sort = 'date_desc', page = '1', limit = '20' } = req.query;
 
   let where = 'WHERE t.user_id = $1';
   const params: any[] = [req.userId];
@@ -17,8 +17,23 @@ router.get('/', async (req: AuthRequest, res) => {
   if (endDate) { where += ` AND t.date <= $${paramIdx++}`; params.push(endDate); }
   if (categoryId) { where += ` AND t.category_id IN (SELECT id FROM categories WHERE (id = $${paramIdx} OR parent_id = $${paramIdx}) AND user_id = $1)`; params.push(categoryId); paramIdx++; }
   if (type) { where += ` AND t.type = $${paramIdx++}`; params.push(type); }
-  if (search) { where += ` AND t.description ILIKE $${paramIdx++}`; params.push(`%${search}%`); }
+  if (search) { where += ` AND (t.description ILIKE $${paramIdx} OR t.merchant_name ILIKE $${paramIdx})`; params.push(`%${search}%`); paramIdx++; }
   if (tagId) { where += ` AND EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag_id = $${paramIdx++})`; params.push(tagId); }
+  if (accountId) { where += ` AND t.account_id = $${paramIdx++}`; params.push(accountId); }
+  if (amountMin) { where += ` AND t.amount >= $${paramIdx++}`; params.push(amountMin); }
+  if (amountMax) { where += ` AND t.amount <= $${paramIdx++}`; params.push(amountMax); }
+  if (isTransfer === 'true') { where += ` AND t.is_transfer = TRUE`; }
+  if (isTransfer === 'false') { where += ` AND t.is_transfer = FALSE`; }
+
+  // Sort options
+  const sortMap: Record<string, string> = {
+    date_desc: 't.date DESC, t.created_at DESC',
+    date_asc: 't.date ASC, t.created_at ASC',
+    amount_desc: 't.amount DESC',
+    amount_asc: 't.amount ASC',
+    description_asc: 't.description ASC',
+  };
+  const orderBy = sortMap[sort as string] || sortMap.date_desc;
 
   const offset = (Number(page) - 1) * Number(limit);
 
@@ -37,7 +52,7 @@ router.get('/', async (req: AuthRequest, res) => {
     LEFT JOIN categories c ON t.category_id = c.id
     LEFT JOIN accounts a ON t.account_id = a.id
     ${where}
-    ORDER BY t.date DESC, t.created_at DESC
+    ORDER BY ${orderBy}
     LIMIT $${paramIdx++} OFFSET $${paramIdx++}
   `, txParams);
 

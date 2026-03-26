@@ -152,3 +152,24 @@ export interface CurrencyInfo {
   name: string;
   symbol: string;
 }
+
+export interface FilterPreset {
+  id: number;
+  name: string;
+  filters: TransactionFilters;
+  created_at: string;
+}
+
+export interface TransactionFilters {
+  search?: string;
+  type?: string;
+  categoryId?: string;
+  tagId?: string;
+  accountId?: string;
+  startDate?: string;
+  endDate?: string;
+  amountMin?: string;
+  amountMax?: string;
+  isTransfer?: string;
+  sort?: string;
+}

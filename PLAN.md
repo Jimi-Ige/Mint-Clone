@@ -168,3 +168,18 @@ React SPA (Vite)  →  Azure App Service (Express API)  →  Azure PostgreSQL
 | v2.6 | Tag system (travel, recurring, refund) | Done |
 | v2.7 | Hierarchical subcategory taxonomy | Done |
 | v2.8 | Multi-currency support | Done |
+
+---
+
+## v3 Roadmap
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| v3.1 | Search & advanced filters (date range, amount range, multi-select, saved presets, sort) | Done |
+| v3.2 | Spending insights & analytics (trends, comparisons, anomaly detection) | Planned |
+| v3.3 | Split transactions (multi-category allocation) | Planned |
+| v3.4 | Scheduled/recurring transactions (auto-create from patterns) | Planned |
+| v3.5 | Data export & reports (PDF statements, custom date ranges) | Planned |
+| v3.6 | User preferences & onboarding (guided setup, default settings) | Planned |
+| v3.7 | Performance & polish (virtualized lists, skeleton loading, optimistic updates) | Planned |
+| v3.8 | Testing suite (unit + integration + E2E) | Planned |
