@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { Transaction, Category, Account } from '../types';
+import { Transaction, Category, Account, Tag } from '../types';
 import { useApi } from '../hooks/useApi';
 import Modal from '../components/ui/Modal';
-import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight, Tag as TagIcon, X } from 'lucide-react';
+import CsvImport from '../components/transactions/CsvImport';
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -17,8 +18,23 @@ export default function TransactionsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
 
+  const [importOpen, setImportOpen] = useState(false);
+  const [categorizing, setCategorizing] = useState(false);
+  const [categorizeResult, setCategorizeResult] = useState<string | null>(null);
+  const [aiCategories, setAiCategories] = useState<string[]>([]);
+  const [mobileActions, setMobileActions] = useState(false);
+  const [detectingTransfers, setDetectingTransfers] = useState(false);
+  const [filterTag, setFilterTag] = useState('');
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [tagPopover, setTagPopover] = useState<number | null>(null);
+
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
+
+  useEffect(() => {
+    api.get<string[]>('/transactions/categories-ai').then(setAiCategories).catch(() => {});
+    api.get<Tag[]>('/tags').then(setAllTags).catch(() => {});
+  }, []);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -26,11 +42,12 @@ export default function TransactionsPage() {
     if (search) params.set('search', search);
     if (filterType) params.set('type', filterType);
     if (filterCategory) params.set('categoryId', filterCategory);
+    if (filterTag) params.set('tagId', filterTag);
     const res = await api.get<{ transactions: Transaction[]; total: number }>(`/transactions?${params}`);
     setTransactions(res.transactions);
     setTotal(res.total);
     setLoading(false);
-  }, [page, search, filterType, filterCategory]);
+  }, [page, search, filterType, filterCategory, filterTag]);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
 
@@ -74,21 +91,150 @@ export default function TransactionsPage() {
     fetchTransactions();
   };
 
+  const handleExport = () => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (filterType) params.set('type', filterType);
+    if (filterCategory) params.set('categoryId', filterCategory);
+    const token = localStorage.getItem('token');
+    fetch(`/api/transactions/export?${params}`, {
+      headers: { Authorization: `Bearer ${token || ''}` },
+    })
+      .then(res => res.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'transactions.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+  };
+
+  const handleAutoCategorize = async () => {
+    setCategorizing(true);
+    setCategorizeResult(null);
+    try {
+      const res = await api.post<{ categorized: number; message?: string }>('/transactions/categorize-bulk', {});
+      setCategorizeResult(res.message || `Categorized ${res.categorized} transactions`);
+      fetchTransactions();
+    } catch (err: any) {
+      setCategorizeResult(err.message);
+    } finally {
+      setCategorizing(false);
+    }
+  };
+
+  const handleManualCategory = async (txId: number, category: string) => {
+    await api.patch(`/transactions/${txId}/manual-category`, { category });
+    fetchTransactions();
+  };
+
+  const handleAddTag = async (txId: number, tagId: number) => {
+    await api.post(`/tags/transaction/${txId}`, { tag_id: tagId });
+    setTagPopover(null);
+    fetchTransactions();
+  };
+
+  const handleRemoveTag = async (txId: number, tagId: number) => {
+    await api.delete(`/tags/transaction/${txId}/${tagId}`);
+    fetchTransactions();
+  };
+
+  const handleDetectTransfers = async () => {
+    setDetectingTransfers(true);
+    setCategorizeResult(null);
+    try {
+      const res = await api.post<{ detected: number; message: string }>('/transfers/detect', {});
+      setCategorizeResult(res.message);
+      fetchTransactions();
+    } catch (err: any) {
+      setCategorizeResult(err.message || 'Transfer detection failed');
+    } finally {
+      setDetectingTransfers(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / 15);
   const filteredCategories = categories?.filter(c => !form.type || c.type === form.type) || [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Transactions</h1>
-        <button onClick={openNew} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Transaction
-        </button>
+    <div className="space-y-4 md:space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl md:text-2xl font-bold">Transactions</h1>
+
+        {/* Desktop actions */}
+        <div className="hidden sm:flex items-center gap-2">
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-2 text-sm">
+            <Download className="w-4 h-4" /> Export
+          </button>
+          <button onClick={() => setImportOpen(true)} className="btn-secondary flex items-center gap-2 text-sm">
+            <Upload className="w-4 h-4" /> Import
+          </button>
+          <button
+            onClick={handleAutoCategorize}
+            disabled={categorizing}
+            className="btn-secondary flex items-center gap-2 text-sm"
+          >
+            <Sparkles className={`w-4 h-4 ${categorizing ? 'animate-pulse' : ''}`} />
+            {categorizing ? 'Categorizing...' : 'Auto-Categorize'}
+          </button>
+          <button
+            onClick={handleDetectTransfers}
+            disabled={detectingTransfers}
+            className="btn-secondary flex items-center gap-2 text-sm"
+          >
+            <ArrowLeftRight className={`w-4 h-4 ${detectingTransfers ? 'animate-pulse' : ''}`} />
+            {detectingTransfers ? 'Detecting...' : 'Detect Transfers'}
+          </button>
+          <button onClick={openNew} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Transaction
+          </button>
+        </div>
+
+        {/* Mobile actions */}
+        <div className="flex sm:hidden items-center gap-2">
+          <button onClick={openNew} className="btn-primary p-2">
+            <Plus className="w-5 h-5" />
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setMobileActions(!mobileActions)}
+              className="btn-secondary p-2"
+            >
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+            {mobileActions && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMobileActions(false)} />
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+                  <button onClick={() => { handleExport(); setMobileActions(false); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
+                    <Download className="w-4 h-4" /> Export CSV
+                  </button>
+                  <button onClick={() => { setImportOpen(true); setMobileActions(false); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
+                    <Upload className="w-4 h-4" /> Import CSV
+                  </button>
+                  <button onClick={() => { handleAutoCategorize(); setMobileActions(false); }} disabled={categorizing} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" /> Auto-Categorize
+                  </button>
+                  <button onClick={() => { handleDetectTransfers(); setMobileActions(false); }} disabled={detectingTransfers} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
+                    <ArrowLeftRight className="w-4 h-4" /> Detect Transfers
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
+      {categorizeResult && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 -mt-2">{categorizeResult}</p>
+      )}
+
       {/* Filters */}
-      <div className="card p-4 flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="card p-3 md:p-4 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
@@ -98,15 +244,23 @@ export default function TransactionsPage() {
             className="input pl-9"
           />
         </div>
-        <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }} className="input w-auto">
-          <option value="">All Types</option>
-          <option value="income">Income</option>
-          <option value="expense">Expense</option>
-        </select>
-        <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setPage(1); }} className="input w-auto">
-          <option value="">All Categories</option>
-          {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
+            <option value="">All Types</option>
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+          </select>
+          <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
+            <option value="">All Categories</option>
+            {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          {allTags.length > 0 && (
+            <select value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(1); }} className="input w-full sm:w-auto">
+              <option value="">All Tags</option>
+              {allTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Transaction List */}
@@ -114,38 +268,118 @@ export default function TransactionsPage() {
         {loading ? (
           <div className="p-8 text-center text-gray-400">Loading...</div>
         ) : transactions.length === 0 ? (
-          <div className="p-12 text-center text-gray-400">
+          <div className="p-8 md:p-12 text-center text-gray-400">
             <p className="text-lg font-medium mb-1">No transactions found</p>
             <p className="text-sm">Add your first transaction to get started</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
             {transactions.map(tx => (
-              <div key={tx.id} className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${tx.category_color || '#6b7280'}15` }}>
+              <div key={tx.id} className="flex items-center justify-between p-3 md:p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: `${tx.category_color || '#6b7280'}15` }}>
                     {tx.type === 'income' ? (
-                      <ArrowUpRight className="w-5 h-5" style={{ color: tx.category_color || '#10b981' }} />
+                      <ArrowUpRight className="w-4 h-4 md:w-5 md:h-5" style={{ color: tx.category_color || '#10b981' }} />
                     ) : (
-                      <ArrowDownRight className="w-5 h-5" style={{ color: tx.category_color || '#ef4444' }} />
+                      <ArrowDownRight className="w-4 h-4 md:w-5 md:h-5" style={{ color: tx.category_color || '#ef4444' }} />
                     )}
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">{tx.description || 'Untitled'}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {tx.category_name || 'Uncategorized'} &middot; {formatDate(tx.date)} &middot; {tx.account_name}
-                    </p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm truncate">{tx.description || 'Untitled'}</p>
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      <span>{tx.category_name || 'Uncategorized'}</span>
+                      {tx.is_transfer && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-medium">
+                          <ArrowLeftRight className="w-2.5 h-2.5" /> Transfer
+                        </span>
+                      )}
+                      {(tx.ai_category || tx.manual_category) && (
+                        <>
+                          <span className="hidden sm:inline">&middot;</span>
+                          <select
+                            value={tx.manual_category || tx.ai_category || ''}
+                            onChange={e => handleManualCategory(tx.id, e.target.value)}
+                            className="hidden sm:inline bg-transparent text-xs border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 cursor-pointer hover:border-gray-400"
+                            title={tx.ai_reason ? `AI: ${tx.ai_reason}` : undefined}
+                          >
+                            {aiCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          {tx.ai_category && !tx.manual_category && (
+                            <span title={tx.ai_reason || 'AI categorized'}>
+                              <Sparkles className="w-3 h-3 text-purple-400" />
+                            </span>
+                          )}
+                        </>
+                      )}
+                      <span>&middot;</span>
+                      <span>{formatDate(tx.date)}</span>
+                      <span className="hidden sm:inline">&middot;</span>
+                      <span className="hidden sm:inline">{tx.account_name}</span>
+                      {tx.tags && tx.tags.length > 0 && tx.tags.map(tag => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                          style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
+                        >
+                          {tag.name}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRemoveTag(tx.id, tag.id); }}
+                            className="hover:opacity-70 hidden sm:inline"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                      {/* Add tag button */}
+                      <div className="relative hidden sm:inline-block">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setTagPopover(tagPopover === tx.id ? null : tx.id); }}
+                          className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400"
+                          title="Add tag"
+                        >
+                          <TagIcon className="w-3 h-3" />
+                        </button>
+                        {tagPopover === tx.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setTagPopover(null)} />
+                            <div className="absolute left-0 top-full mt-1 w-36 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1 max-h-40 overflow-auto">
+                              {allTags
+                                .filter(t => !tx.tags?.some(tt => tt.id === t.id))
+                                .map(t => (
+                                  <button
+                                    key={t.id}
+                                    onClick={(e) => { e.stopPropagation(); handleAddTag(tx.id, t.id); }}
+                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                                  >
+                                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                                    {t.name}
+                                  </button>
+                                ))}
+                              {allTags.filter(t => !tx.tags?.some(tt => tt.id === t.id)).length === 0 && (
+                                <p className="px-3 py-1.5 text-xs text-gray-400">All tags applied</p>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className={`font-semibold ${tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+                  <span className={`font-semibold text-sm ${tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                   </span>
-                  <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+                  <div className="hidden sm:flex items-center gap-1">
+                    <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleDelete(tx.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {/* Mobile: tap row to edit */}
+                  <button onClick={() => openEdit(tx)} className="sm:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
                     <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => handleDelete(tx.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500">
-                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -155,14 +389,33 @@ export default function TransactionsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-gray-100 dark:border-gray-700/50">
-            <p className="text-sm text-gray-500">{total} transactions</p>
+          <div className="flex items-center justify-between p-3 md:p-4 border-t border-gray-100 dark:border-gray-700/50">
+            <p className="text-xs md:text-sm text-gray-500">{total} transactions</p>
             <div className="flex gap-1">
+              {/* Show prev/next on mobile, page numbers on desktop */}
+              <button
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1}
+                className="sm:hidden w-8 h-8 rounded-lg text-sm font-medium transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 disabled:opacity-30"
+              >
+                &lsaquo;
+              </button>
+              <span className="sm:hidden flex items-center px-2 text-xs text-gray-500">
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page === totalPages}
+                className="sm:hidden w-8 h-8 rounded-lg text-sm font-medium transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 disabled:opacity-30"
+              >
+                &rsaquo;
+              </button>
+              {/* Desktop page numbers */}
               {Array.from({ length: totalPages }, (_, i) => (
                 <button
                   key={i}
                   onClick={() => setPage(i + 1)}
-                  className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                  className={`hidden sm:block w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
                     page === i + 1 ? 'bg-primary-500 text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400'
                   }`}
                 >
@@ -194,7 +447,7 @@ export default function TransactionsPage() {
             <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Description</label>
             <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="input" placeholder="What was this for?" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Category</label>
               <select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })} className="input">
@@ -214,8 +467,20 @@ export default function TransactionsPage() {
             </select>
           </div>
           <button type="submit" className="btn-primary w-full">{editing ? 'Update' : 'Add'} Transaction</button>
+          {editing && (
+            <button
+              type="button"
+              onClick={() => { handleDelete(editing.id); setModalOpen(false); }}
+              className="w-full text-sm text-rose-500 hover:text-rose-600 py-2 sm:hidden"
+            >
+              Delete Transaction
+            </button>
+          )}
         </form>
       </Modal>
+
+      {/* CSV Import Modal */}
+      <CsvImport open={importOpen} onClose={() => setImportOpen(false)} onSuccess={fetchTransactions} />
     </div>
   );
 }

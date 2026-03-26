@@ -1,59 +1,61 @@
 import { Router } from 'express';
-import db from '../db/connection';
+import pool from '../db/connection';
+import { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/', (_req, res) => {
-  const goals = db.prepare('SELECT * FROM savings_goals ORDER BY status, created_at DESC').all();
-  res.json(goals);
+router.get('/', async (req: AuthRequest, res) => {
+  const { rows } = await pool.query('SELECT * FROM savings_goals WHERE user_id = $1 ORDER BY status, created_at DESC', [req.userId]);
+  res.json(rows);
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   const { name, target_amount, deadline, icon = 'target', color = '#10b981' } = req.body;
   if (!name || !target_amount) return res.status(400).json({ error: 'Name and target_amount are required' });
 
-  const result = db.prepare(
-    'INSERT INTO savings_goals (name, target_amount, deadline, icon, color) VALUES (?, ?, ?, ?, ?)'
-  ).run(name, target_amount, deadline || null, icon, color);
-
-  res.status(201).json(db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(result.lastInsertRowid));
+  const { rows } = await pool.query(
+    'INSERT INTO savings_goals (user_id, name, target_amount, deadline, icon, color) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    [req.userId, name, target_amount, deadline || null, icon, color]
+  );
+  res.status(201).json(rows[0]);
 });
 
-router.put('/:id', (req, res) => {
-  const goal = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(req.params.id);
-  if (!goal) return res.status(404).json({ error: 'Goal not found' });
+router.put('/:id', async (req: AuthRequest, res) => {
+  const { rows } = await pool.query('SELECT * FROM savings_goals WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Goal not found' });
 
   const { name, target_amount, deadline, icon, color, status } = req.body;
-  db.prepare(`
+  const result = await pool.query(`
     UPDATE savings_goals SET
-      name = COALESCE(?, name), target_amount = COALESCE(?, target_amount),
-      deadline = COALESCE(?, deadline), icon = COALESCE(?, icon),
-      color = COALESCE(?, color), status = COALESCE(?, status)
-    WHERE id = ?
-  `).run(name, target_amount, deadline, icon, color, status, req.params.id);
-
-  res.json(db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(req.params.id));
+      name = COALESCE($1, name), target_amount = COALESCE($2, target_amount),
+      deadline = COALESCE($3, deadline), icon = COALESCE($4, icon),
+      color = COALESCE($5, color), status = COALESCE($6, status)
+    WHERE id = $7 AND user_id = $8 RETURNING *
+  `, [name, target_amount, deadline, icon, color, status, req.params.id, req.userId]);
+  res.json(result.rows[0]);
 });
 
-router.patch('/:id/contribute', (req, res) => {
+router.patch('/:id/contribute', async (req: AuthRequest, res) => {
   const { amount } = req.body;
   if (!amount || amount <= 0) return res.status(400).json({ error: 'Positive amount is required' });
 
-  const goal = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(req.params.id) as any;
-  if (!goal) return res.status(404).json({ error: 'Goal not found' });
+  const { rows } = await pool.query('SELECT * FROM savings_goals WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Goal not found' });
 
-  const newAmount = goal.current_amount + amount;
-  const newStatus = newAmount >= goal.target_amount ? 'completed' : 'active';
+  const goal = rows[0];
+  const newAmount = Number(goal.current_amount) + amount;
+  const newStatus = newAmount >= Number(goal.target_amount) ? 'completed' : 'active';
 
-  db.prepare('UPDATE savings_goals SET current_amount = ?, status = ? WHERE id = ?')
-    .run(newAmount, newStatus, req.params.id);
-
-  res.json(db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(req.params.id));
+  const result = await pool.query(
+    'UPDATE savings_goals SET current_amount = $1, status = $2 WHERE id = $3 RETURNING *',
+    [newAmount, newStatus, req.params.id]
+  );
+  res.json(result.rows[0]);
 });
 
-router.delete('/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM savings_goals WHERE id = ?').run(req.params.id);
-  if (result.changes === 0) return res.status(404).json({ error: 'Goal not found' });
+router.delete('/:id', async (req: AuthRequest, res) => {
+  const { rowCount } = await pool.query('DELETE FROM savings_goals WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  if (rowCount === 0) return res.status(404).json({ error: 'Goal not found' });
   res.json({ success: true });
 });
 

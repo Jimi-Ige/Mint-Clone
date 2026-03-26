@@ -1,35 +1,40 @@
 import { Router } from 'express';
-import db from '../db/connection';
+import pool from '../db/connection';
+import { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/', (_req, res) => {
-  const accounts = db.prepare('SELECT * FROM accounts ORDER BY created_at DESC').all();
-  res.json(accounts);
+router.get('/', async (req: AuthRequest, res) => {
+  const { rows } = await pool.query('SELECT * FROM accounts WHERE user_id = $1 ORDER BY created_at DESC', [req.userId]);
+  res.json(rows);
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   const { name, type = 'checking', balance = 0, currency = 'USD' } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
-  const result = db.prepare('INSERT INTO accounts (name, type, balance, currency) VALUES (?, ?, ?, ?)').run(name, type, balance, currency);
-  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(result.lastInsertRowid);
-  res.status(201).json(account);
+  const { rows } = await pool.query(
+    'INSERT INTO accounts (user_id, name, type, balance, currency) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [req.userId, name, type, balance, currency]
+  );
+  res.status(201).json(rows[0]);
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req: AuthRequest, res) => {
   const { name, type, currency } = req.body;
-  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id);
-  if (!account) return res.status(404).json({ error: 'Account not found' });
+  const { rows } = await pool.query('SELECT * FROM accounts WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Account not found' });
 
-  db.prepare('UPDATE accounts SET name = COALESCE(?, name), type = COALESCE(?, type), currency = COALESCE(?, currency) WHERE id = ?')
-    .run(name, type, currency, req.params.id);
-  res.json(db.prepare('SELECT * FROM accounts WHERE id = ?').get(req.params.id));
+  const result = await pool.query(
+    'UPDATE accounts SET name = COALESCE($1, name), type = COALESCE($2, type), currency = COALESCE($3, currency) WHERE id = $4 AND user_id = $5 RETURNING *',
+    [name, type, currency, req.params.id, req.userId]
+  );
+  res.json(result.rows[0]);
 });
 
-router.delete('/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM accounts WHERE id = ?').run(req.params.id);
-  if (result.changes === 0) return res.status(404).json({ error: 'Account not found' });
+router.delete('/:id', async (req: AuthRequest, res) => {
+  const { rowCount } = await pool.query('DELETE FROM accounts WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  if (rowCount === 0) return res.status(404).json({ error: 'Account not found' });
   res.json({ success: true });
 });
 
