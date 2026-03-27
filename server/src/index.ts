@@ -19,6 +19,7 @@ import transfersRouter from './routes/transfers';
 import snapshotsRouter from './routes/snapshots';
 import tagsRouter from './routes/tags';
 import currencyRouter from './routes/currency';
+import filterPresetsRouter from './routes/filterPresets';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -85,6 +86,7 @@ app.use('/api/transfers', authMiddleware, transfersRouter);
 app.use('/api/snapshots', authMiddleware, snapshotsRouter);
 app.use('/api/tags', authMiddleware, tagsRouter);
 app.use('/api/currency', authMiddleware, currencyRouter);
+app.use('/api/filter-presets', authMiddleware, filterPresetsRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');
