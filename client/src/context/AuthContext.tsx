@@ -103,11 +103,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const completeOnboarding = useCallback(async () => {
     if (!token) return;
-    await fetch('/api/auth/onboarding', {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    setUser(prev => prev ? { ...prev, onboarding_completed: true } : prev);
+    try {
+      const res = await fetch('/api/auth/onboarding', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) throw new Error('Failed to complete onboarding');
+      setUser(prev => prev ? { ...prev, onboarding_completed: true } : prev);
+    } catch {
+      // Even if the server call fails, let the user proceed to the dashboard
+      setUser(prev => prev ? { ...prev, onboarding_completed: true } : prev);
+    }
   }, [token]);
 
   return (
