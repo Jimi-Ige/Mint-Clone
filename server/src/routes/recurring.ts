@@ -256,6 +256,176 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ── Record a payment from a recurring pattern ────────────────────
+router.post('/:id/record', async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `SELECT * FROM recurring_patterns WHERE id = $1 AND user_id = $2 AND status = 'active'`,
+      [req.params.id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Active pattern not found' });
+    }
+
+    const pattern = result.rows[0];
+    const amount = req.body.amount ? parseFloat(req.body.amount) : parseFloat(pattern.avg_amount);
+    const date = req.body.date || new Date().toISOString().split('T')[0];
+    const accountId = pattern.account_id;
+
+    if (!accountId) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Pattern has no linked account. Edit the pattern to add one.' });
+    }
+
+    // Verify account belongs to user
+    const acc = await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [accountId, req.userId]);
+    if (acc.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Account not found' });
+    }
+
+    // Create the transaction
+    const txResult = await client.query(
+      `INSERT INTO transactions (user_id, account_id, category_id, amount, type, description, date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [req.userId, accountId, pattern.category_id, amount, pattern.type, pattern.description, date]
+    );
+
+    // Update account balance
+    const balanceChange = pattern.type === 'income' ? amount : -amount;
+    await client.query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [balanceChange, accountId]);
+
+    // Advance pattern to next occurrence
+    const nextDate = calculateNextDate(new Date(pattern.next_expected), pattern.frequency);
+    await client.query(
+      `UPDATE recurring_patterns
+       SET last_date = $1, next_expected = $2, occurrence_count = occurrence_count + 1, updated_at = NOW()
+       WHERE id = $3`,
+      [date, nextDate.toISOString().split('T')[0], pattern.id]
+    );
+
+    await client.query('COMMIT');
+
+    // Return transaction with category/account info
+    const { rows } = await pool.query(`
+      SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color, a.name as account_name
+      FROM transactions t LEFT JOIN categories c ON t.category_id = c.id LEFT JOIN accounts a ON t.account_id = a.id
+      WHERE t.id = $1
+    `, [txResult.rows[0].id]);
+
+    res.status(201).json({
+      transaction: rows[0],
+      nextExpected: nextDate.toISOString().split('T')[0],
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Record payment error:', err);
+    res.status(500).json({ error: 'Failed to record payment' });
+  } finally {
+    client.release();
+  }
+});
+
+// ── Skip an occurrence (advance without creating transaction) ────
+router.post('/:id/skip', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM recurring_patterns WHERE id = $1 AND user_id = $2 AND status = 'active'`,
+      [req.params.id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Active pattern not found' });
+    }
+
+    const pattern = result.rows[0];
+    const nextDate = calculateNextDate(new Date(pattern.next_expected), pattern.frequency);
+
+    await pool.query(
+      `UPDATE recurring_patterns SET next_expected = $1, updated_at = NOW() WHERE id = $2`,
+      [nextDate.toISOString().split('T')[0], pattern.id]
+    );
+
+    res.json({ nextExpected: nextDate.toISOString().split('T')[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to skip occurrence' });
+  }
+});
+
+// ── Process all overdue patterns (batch auto-create) ─────────────
+router.post('/process-due', async (req: AuthRequest, res: Response) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get all active patterns where next_expected is in the past
+    const { rows: duePatterns } = await client.query(
+      `SELECT * FROM recurring_patterns
+       WHERE user_id = $1 AND status = 'active' AND next_expected <= CURRENT_DATE AND account_id IS NOT NULL`,
+      [req.userId]
+    );
+
+    let created = 0;
+    let skipped = 0;
+    const results: { description: string; amount: number; date: string }[] = [];
+
+    for (const pattern of duePatterns) {
+      // Only process if account exists
+      const acc = await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [pattern.account_id, req.userId]);
+      if (acc.rows.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      // Create transaction for the due date
+      const amount = parseFloat(pattern.avg_amount);
+      const date = pattern.next_expected;
+
+      await client.query(
+        `INSERT INTO transactions (user_id, account_id, category_id, amount, type, description, date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [req.userId, pattern.account_id, pattern.category_id, amount, pattern.type, pattern.description, date]
+      );
+
+      // Update account balance
+      const balanceChange = pattern.type === 'income' ? amount : -amount;
+      await client.query('UPDATE accounts SET balance = balance + $1 WHERE id = $2', [balanceChange, pattern.account_id]);
+
+      // Advance to next occurrence
+      const nextDate = calculateNextDate(new Date(pattern.next_expected), pattern.frequency);
+      await client.query(
+        `UPDATE recurring_patterns
+         SET last_date = $1, next_expected = $2, occurrence_count = occurrence_count + 1, updated_at = NOW()
+         WHERE id = $3`,
+        [date, nextDate.toISOString().split('T')[0], pattern.id]
+      );
+
+      created++;
+      results.push({ description: pattern.description, amount, date });
+    }
+
+    await client.query('COMMIT');
+    res.json({
+      processed: created,
+      skipped,
+      total: duePatterns.length,
+      transactions: results,
+      message: created > 0
+        ? `Auto-created ${created} transaction${created !== 1 ? 's' : ''} from overdue bills`
+        : 'No overdue bills to process',
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Process due error:', err);
+    res.status(500).json({ error: 'Failed to process overdue patterns' });
+  } finally {
+    client.release();
+  }
+});
+
 // ── Helper functions ──────────────────────────────────────────────
 
 function normalizeKey(description: string, merchantName: string | null, type: string): string {
