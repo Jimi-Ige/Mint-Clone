@@ -3,17 +3,13 @@ import bcrypt from 'bcrypt';
 import pool from '../db/connection';
 import { generateToken } from '../middleware/auth';
 import { seedUserData } from '../db/schema';
+import { validate } from '../middleware/validate';
+import { registerSchema, loginSchema } from '../schemas';
 
 const router = Router();
 
-router.post('/register', async (req, res) => {
+router.post('/register', validate(registerSchema), async (req, res) => {
   const { email, password, name } = req.body;
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: 'Email, password, and name are required' });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  }
 
   try {
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
@@ -40,11 +36,8 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', validate(loginSchema), async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
 
   try {
     const result = await pool.query('SELECT id, email, name, password_hash FROM users WHERE email = $1', [email]);

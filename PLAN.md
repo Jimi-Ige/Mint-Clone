@@ -183,3 +183,16 @@ React SPA (Vite)  →  Azure App Service (Express API)  →  Azure PostgreSQL
 | v3.6 | User preferences & onboarding (guided setup, default settings) | Done |
 | v3.7 | Performance & polish (virtualized lists, skeleton loading, optimistic updates) | Done |
 | v3.8 | Testing suite (unit + integration + E2E) | Done |
+
+---
+
+## v4: Production Readiness
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| v4.1 | Security hardening (Zod validation, Helmet, env check, password rules, webhooks, rate limiting) | Done |
+| v4.2 | Docker & CI/CD (Dockerfile, docker-compose, GitHub Actions, health endpoints) | Planned |
+| v4.3 | Database migrations (versioned migration files, startup runner) | Planned |
+| v4.4 | Azure deployment (App Service, PostgreSQL, Key Vault, production config) | Planned |
+| v4.5 | Monitoring & logging (structured logs, audit trail, graceful shutdown) | Planned |
+| v4.6 | Client hardening (404 page, session expiry, HttpOnly cookies, offline warning) | Planned |

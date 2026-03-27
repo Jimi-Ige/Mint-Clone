@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { splitSchema } from '../schemas';
 
 const router = Router();
 
@@ -45,11 +47,8 @@ router.get('/:transactionId', async (req: AuthRequest, res) => {
  * - Each split amount must be > 0
  * - To unsplit, send empty splits array
  */
-router.put('/:transactionId', async (req: AuthRequest, res) => {
+router.put('/:transactionId', validate(splitSchema), async (req: AuthRequest, res) => {
   const { splits } = req.body;
-  if (!Array.isArray(splits)) {
-    return res.status(400).json({ error: 'splits must be an array' });
-  }
 
   const client = await pool.connect();
   try {

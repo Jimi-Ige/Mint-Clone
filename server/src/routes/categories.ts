@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { createCategorySchema } from '../schemas';
 
 const router = Router();
 
@@ -37,10 +39,8 @@ router.get('/tree', async (req: AuthRequest, res) => {
 });
 
 // POST /api/categories
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', validate(createCategorySchema), async (req: AuthRequest, res) => {
   const { name, type, icon = 'circle', color = '#6b7280', parent_id } = req.body;
-  if (!name || !type) return res.status(400).json({ error: 'Name and type are required' });
-  if (!['income', 'expense'].includes(type)) return res.status(400).json({ error: 'Type must be income or expense' });
 
   // Validate parent if provided
   if (parent_id) {

@@ -61,7 +61,7 @@ export default function LoginPage() {
             </div>
             <div>
               <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Password</label>
-              <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="input" placeholder="At least 6 characters" />
+              <input type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} className="input" placeholder="Min 8 chars, upper+lower+number" />
             </div>
             <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
               {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Sign In'}

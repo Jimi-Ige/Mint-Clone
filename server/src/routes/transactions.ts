@@ -3,6 +3,8 @@ import { Parser } from 'json2csv';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
 import { categorizeTransactions, CATEGORIES } from '../services/categorization';
+import { validate } from '../middleware/validate';
+import { createTransactionSchema, updateTransactionSchema, importTransactionsSchema } from '../schemas';
 
 const router = Router();
 
@@ -68,11 +70,8 @@ router.get('/', async (req: AuthRequest, res) => {
   res.json({ transactions, total: parseInt(countResult.rows[0].total), page: Number(page), limit: Number(limit) });
 });
 
-router.post('/', async (req: AuthRequest, res) => {
-  const { account_id, category_id, amount, type, description = '', date } = req.body;
-  if (!account_id || !amount || !type || !date) {
-    return res.status(400).json({ error: 'account_id, amount, type, and date are required' });
-  }
+router.post('/', validate(createTransactionSchema), async (req: AuthRequest, res) => {
+  const { account_id, category_id, amount, type, description, date } = req.body;
 
   const client = await pool.connect();
   try {
@@ -106,7 +105,7 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 });
 
-router.put('/:id', async (req: AuthRequest, res) => {
+router.put('/:id', validate(updateTransactionSchema), async (req: AuthRequest, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -206,11 +205,8 @@ router.get('/export', async (req: AuthRequest, res) => {
 });
 
 // POST /api/transactions/import — import transactions from CSV
-router.post('/import', async (req: AuthRequest, res) => {
+router.post('/import', validate(importTransactionsSchema), async (req: AuthRequest, res) => {
   const { transactions: rows } = req.body;
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return res.status(400).json({ error: 'No transactions provided' });
-  }
 
   // Get user's accounts and categories for matching
   const { rows: userAccounts } = await pool.query('SELECT id, name FROM accounts WHERE user_id = $1', [req.userId]);

@@ -1,11 +1,15 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { initializeDatabase } from './db/schema';
 import { errorHandler } from './middleware/errorHandler';
 import { authMiddleware } from './middleware/auth';
+import { validateEnv } from './middleware/envCheck';
+import { validate } from './middleware/validate';
+import { profileUpdateSchema, preferencesSchema } from './schemas';
 import authRouter from './routes/auth';
 import accountsRouter from './routes/accounts';
 import categoriesRouter from './routes/categories';
@@ -23,27 +27,56 @@ import filterPresetsRouter from './routes/filterPresets';
 import analyticsRouter from './routes/analytics';
 import splitsRouter from './routes/splits';
 import reportsRouter from './routes/reports';
+import webhooksRouter from './routes/webhooks';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
+
+// Validate required env vars before doing anything else
+validateEnv();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Rate limiting
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // CSP handled by frontend build
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Global rate limiting — 200 req / 15 min per IP
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later' },
 });
 
+// Strict rate limit on auth endpoints — 10 attempts / 15 min per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later' },
+});
+
+// Rate limit for AI categorization — 5 bulk requests / 15 min per IP
+const categorizeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Categorization rate limit reached, please try again later' },
+});
+
 app.use(limiter);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
-// Public auth routes (login, register)
-app.use('/api/auth', authRouter);
+// Public routes
+app.use('/api/auth', authLimiter, authRouter);
+app.use('/api/webhooks', webhooksRouter);
 
 // Protected: get current user (also captures daily balance snapshot)
 app.get('/api/auth/me', authMiddleware, async (req: any, res) => {
@@ -77,7 +110,7 @@ app.get('/api/auth/me', authMiddleware, async (req: any, res) => {
 });
 
 // Profile & preferences (protected)
-app.put('/api/auth/profile', authMiddleware, async (req: any, res) => {
+app.put('/api/auth/profile', authMiddleware, validate(profileUpdateSchema), async (req: any, res) => {
   try {
     const pool = (await import('./db/connection')).default;
     const { name, currentPassword, newPassword } = req.body;
@@ -91,12 +124,10 @@ app.put('/api/auth/profile', authMiddleware, async (req: any, res) => {
     }
 
     if (newPassword) {
-      if (!currentPassword) return res.status(400).json({ error: 'Current password is required' });
       const userResult = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
       const bcrypt = (await import('bcrypt')).default;
       const valid = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
       if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
-      if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
       const hash = await bcrypt.hash(newPassword, 12);
       updates.push(`password_hash = $${idx++}`);
       values.push(hash);
@@ -125,11 +156,10 @@ app.get('/api/auth/preferences', authMiddleware, async (req: any, res) => {
   }
 });
 
-app.put('/api/auth/preferences', authMiddleware, async (req: any, res) => {
+app.put('/api/auth/preferences', authMiddleware, validate(preferencesSchema), async (req: any, res) => {
   try {
     const pool = (await import('./db/connection')).default;
     const { preferences } = req.body;
-    if (!preferences || typeof preferences !== 'object') return res.status(400).json({ error: 'preferences object required' });
     // Merge with existing preferences
     await pool.query(
       `UPDATE users SET preferences = preferences || $1::jsonb WHERE id = $2`,
@@ -155,6 +185,7 @@ app.put('/api/auth/onboarding', authMiddleware, async (req: any, res) => {
 // Protected API routes
 app.use('/api/accounts', authMiddleware, accountsRouter);
 app.use('/api/categories', authMiddleware, categoriesRouter);
+app.use('/api/transactions/categorize-bulk', authMiddleware, categorizeLimiter);
 app.use('/api/transactions', authMiddleware, transactionsRouter);
 app.use('/api/budgets', authMiddleware, budgetsRouter);
 app.use('/api/goals', authMiddleware, goalsRouter);
