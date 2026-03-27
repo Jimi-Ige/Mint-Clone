@@ -196,3 +196,17 @@ React SPA (Vite)  →  Azure App Service (Express API)  →  Azure PostgreSQL
 | v4.4 | Azure deployment (App Service, PostgreSQL, Key Vault, production config) | Done |
 | v4.5 | Monitoring & logging (structured logs, audit trail, graceful shutdown) | Done |
 | v4.6 | Client hardening (404 page, session expiry, offline warning) | Done |
+| v4.7 | Cost-optimize Azure provisioning for single user | Done |
+
+---
+
+## v5: UX Polish & Real-World Readiness
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| v5.1 | Codebase cleanup (remove SQLite remnants, update docs) | Done |
+| v5.2 | PWA support (installable app, service worker, offline caching) | Done |
+| v5.3 | Email notifications (budget alerts, bill reminders via Resend) | Done |
+| v5.4 | Accessibility (ARIA, focus trap, skip link, keyboard nav, focus-visible) | Done |
+| v5.5 | Bundle optimization (vendor splitting, gzip precompression, -84% main bundle) | Done |
+| v5.6 | Data privacy (full JSON export, account deletion with confirmation) | Done |
