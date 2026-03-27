@@ -35,7 +35,7 @@ export default function InsightsPage() {
   ];
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 slide-up">
       <h1 className="text-xl md:text-2xl font-bold">Insights & Analytics</h1>
 
       {/* Tab Navigation */}

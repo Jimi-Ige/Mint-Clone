@@ -224,7 +224,7 @@ export default function RecurringPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4 md:space-y-6">
+      <div className="space-y-4 md:space-y-6 slide-up">
         <h1 className="text-xl md:text-2xl font-bold">Bills & Recurring</h1>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[...Array(3)].map((_, i) => (
@@ -239,7 +239,7 @@ export default function RecurringPage() {
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 slide-up">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl md:text-2xl font-bold">Bills & Recurring</h1>

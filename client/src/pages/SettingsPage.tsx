@@ -7,11 +7,13 @@ import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown, Globe
 import PlaidLinkButton from '../components/settings/PlaidLink';
 import ConnectedAccounts from '../components/settings/ConnectedAccounts';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ui/Toast';
 
 const colorOptions = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#0ea5e9', '#a855f7', '#f43f5e'];
 
 export default function SettingsPage() {
   const { user, updateBaseCurrency, updateUser } = useAuth();
+  const { toast } = useToast();
   const { data: categories, refetch: refetchCats } = useApi<Category[]>('/categories');
   const { data: accounts, refetch: refetchAccounts } = useApi<Account[]>('/accounts');
   const { data: institutions, refetch: refetchInstitutions } = useApi<Institution[]>('/plaid/institutions');
@@ -100,11 +102,13 @@ export default function SettingsPage() {
       if (Object.keys(body).length === 0) { setProfileMsg('No changes'); setProfileSaving(false); return; }
       const result = await api.put<{ name: string }>('/auth/profile', body);
       updateUser({ name: result.name });
-      setProfileMsg('Profile updated');
+      toast('Profile updated');
+      setProfileMsg('');
       setCurrentPassword('');
       setNewPassword('');
     } catch (err: any) {
-      setProfileMsg(err.message || 'Update failed');
+      toast(err.message || 'Update failed', 'error');
+      setProfileMsg('');
     } finally {
       setProfileSaving(false);
     }
@@ -121,8 +125,9 @@ export default function SettingsPage() {
     try {
       await api.put('/auth/preferences', { preferences: { [key]: value } });
       updateUser({ preferences: updated });
+      toast('Preference saved');
     } catch {
-      // Revert on failure
+      toast('Failed to save preference', 'error');
       setPrefs(user?.preferences || {});
     } finally {
       setPrefsSaving(false);
@@ -194,7 +199,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 md:space-y-8">
+    <div className="space-y-6 md:space-y-8 slide-up">
       <h1 className="text-xl md:text-2xl font-bold">Settings</h1>
 
       {/* Profile */}
