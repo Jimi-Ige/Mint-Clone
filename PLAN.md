@@ -182,4 +182,4 @@ React SPA (Vite)  →  Azure App Service (Express API)  →  Azure PostgreSQL
 | v3.5 | Data export & reports (PDF statements, custom date ranges) | Done |
 | v3.6 | User preferences & onboarding (guided setup, default settings) | Done |
 | v3.7 | Performance & polish (virtualized lists, skeleton loading, optimistic updates) | Done |
-| v3.8 | Testing suite (unit + integration + E2E) | Planned |
+| v3.8 | Testing suite (unit + integration + E2E) | Done |
