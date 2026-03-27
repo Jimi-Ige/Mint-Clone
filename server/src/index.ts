@@ -22,6 +22,7 @@ import currencyRouter from './routes/currency';
 import filterPresetsRouter from './routes/filterPresets';
 import analyticsRouter from './routes/analytics';
 import splitsRouter from './routes/splits';
+import reportsRouter from './routes/reports';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -91,6 +92,7 @@ app.use('/api/currency', authMiddleware, currencyRouter);
 app.use('/api/filter-presets', authMiddleware, filterPresetsRouter);
 app.use('/api/analytics', authMiddleware, analyticsRouter);
 app.use('/api/splits', authMiddleware, splitsRouter);
+app.use('/api/reports', authMiddleware, reportsRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');
