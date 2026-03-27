@@ -3,7 +3,7 @@ import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
 import { Category, Account, Institution, Tag, CurrencyInfo } from '../types';
 import Modal from '../components/ui/Modal';
-import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown, Globe, User, Lock, Settings2, Bell } from 'lucide-react';
+import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown, Globe, User, Lock, Settings2, Bell, Download, Shield } from 'lucide-react';
 import PlaidLinkButton from '../components/settings/PlaidLink';
 import ConnectedAccounts from '../components/settings/ConnectedAccounts';
 import { useAuth } from '../context/AuthContext';
@@ -84,6 +84,25 @@ export default function SettingsPage() {
   };
 
   const deleteTag = async (id: number) => { await api.delete(`/tags/${id}`); refetchTags(); };
+
+  // Delete account state
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirm !== 'DELETE') return;
+    setDeleting(true);
+    try {
+      await api.delete('/privacy/account', { password: deletePassword });
+      logout();
+    } catch (err: any) {
+      toast(err.message || 'Failed to delete account', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Profile state
   const [profileName, setProfileName] = useState(user?.name || '');
@@ -467,6 +486,58 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Data & Privacy */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2"><Shield className="w-5 h-5" /> Data & Privacy</h2>
+        </div>
+        <div className="card p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Export all data</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Download everything as JSON</p>
+            </div>
+            <a
+              href="/api/privacy/export"
+              download
+              onClick={e => {
+                e.preventDefault();
+                const token = localStorage.getItem('token');
+                fetch('/api/privacy/export', { headers: { Authorization: `Bearer ${token}` } })
+                  .then(r => r.blob())
+                  .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `mint-export-${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast('Data exported');
+                  })
+                  .catch(() => toast('Export failed', 'error'));
+              }}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              <Download className="w-4 h-4" /> Export
+            </a>
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">Delete account</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Permanently remove your account and all data</p>
+              </div>
+              <button
+                onClick={() => setDeleteModal(true)}
+                className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/30 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+              >
+                Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Tag Modal */}
       <Modal open={tagModal} onClose={() => setTagModal(false)} title={editingTag ? 'Edit Tag' : 'Add Tag'}>
         <form onSubmit={handleTagSubmit} className="space-y-4">
@@ -556,6 +627,45 @@ export default function SettingsPage() {
           </div>
           <button type="submit" className="btn-primary w-full">Create Account</button>
         </form>
+      </Modal>
+
+      {/* Delete Account Modal */}
+      <Modal open={deleteModal} onClose={() => { setDeleteModal(false); setDeletePassword(''); setDeleteConfirm(''); }} title="Delete Account">
+        <div className="space-y-4">
+          <div className="p-3 bg-red-50 dark:bg-red-500/10 rounded-lg border border-red-200 dark:border-red-500/20">
+            <p className="text-sm text-red-700 dark:text-red-300 font-medium">This action is permanent and cannot be undone.</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1">All your accounts, transactions, budgets, goals, and settings will be permanently deleted.</p>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Password</label>
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={e => setDeletePassword(e.target.value)}
+              className="input"
+              placeholder="Enter your password"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">
+              Type <span className="font-mono font-bold">DELETE</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={deleteConfirm}
+              onChange={e => setDeleteConfirm(e.target.value)}
+              className="input"
+              placeholder="DELETE"
+            />
+          </div>
+          <button
+            onClick={handleDeleteAccount}
+            disabled={deleting || deleteConfirm !== 'DELETE' || !deletePassword}
+            className="w-full py-2 px-4 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+          >
+            {deleting ? 'Deleting...' : 'Permanently Delete Account'}
+          </button>
+        </div>
       </Modal>
     </div>
   );
