@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import fs from 'fs';
 import path from 'path';
+import { logger } from '../lib/logger';
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
@@ -36,7 +37,7 @@ export async function runMigrations(pool: Pool): Promise<void> {
         `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users'`
       );
       if (tables.length > 0) {
-        console.log('[MIGRATE] Existing database detected — marking 001_initial_schema.sql as applied');
+        logger.info('[MIGRATE] Existing database detected — marking 001_initial_schema.sql as applied');
         await client.query(
           "INSERT INTO _migrations (name) VALUES ('001_initial_schema.sql') ON CONFLICT DO NOTHING"
         );
@@ -56,7 +57,7 @@ export async function runMigrations(pool: Pool): Promise<void> {
 
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
 
-      console.log(`[MIGRATE] Running: ${file}`);
+      logger.info(`Running migration: ${file}`);
 
       try {
         await client.query('BEGIN');
@@ -67,18 +68,18 @@ export async function runMigrations(pool: Pool): Promise<void> {
         );
         await client.query('COMMIT');
         ranCount++;
-        console.log(`[MIGRATE] ✓ ${file}`);
+        logger.info(`Migration applied: ${file}`);
       } catch (err) {
         await client.query('ROLLBACK');
-        console.error(`[MIGRATE] ✗ ${file} failed:`, err);
+        logger.error(`Migration failed: ${file}`, { error: (err as Error).message });
         throw err;
       }
     }
 
     if (ranCount === 0) {
-      console.log('[MIGRATE] Database is up to date');
+      logger.info('[MIGRATE] Database is up to date');
     } else {
-      console.log(`[MIGRATE] Applied ${ranCount} migration(s)`);
+      logger.info(`Applied ${ranCount} migration(s)`);
     }
   } finally {
     client.release();
