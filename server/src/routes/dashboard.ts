@@ -65,16 +65,29 @@ router.get('/', async (req: AuthRequest, res) => {
   );
 
   // Spending by category (filtered, excluding transfers) — roll up subcategories into parents
+  // Split-aware: use split allocations when a transaction has splits, otherwise use transaction category
   const { rows: spendingByCategory } = await pool.query(`
+    WITH effective_categories AS (
+      -- Non-split transactions: use transaction category
+      SELECT t.id as tx_id, t.category_id, t.amount
+      FROM transactions t
+      WHERE ${fullFilter} AND t.type = 'expense' AND t.is_transfer = FALSE
+        AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
+      UNION ALL
+      -- Split transactions: use split categories/amounts
+      SELECT t.id as tx_id, s.category_id, s.amount
+      FROM transactions t
+      JOIN transaction_splits s ON s.transaction_id = t.id
+      WHERE ${fullFilter} AND t.type = 'expense' AND t.is_transfer = FALSE
+    )
     SELECT
       COALESCE(p.name, c.name) as name,
       COALESCE(p.color, c.color) as color,
       COALESCE(p.icon, c.icon) as icon,
-      COALESCE(SUM(t.amount), 0) as amount
-    FROM transactions t
-    JOIN categories c ON t.category_id = c.id
+      COALESCE(SUM(ec.amount), 0) as amount
+    FROM effective_categories ec
+    JOIN categories c ON ec.category_id = c.id
     LEFT JOIN categories p ON c.parent_id = p.id
-    WHERE ${fullFilter} AND t.type = 'expense' AND t.is_transfer = FALSE
     GROUP BY COALESCE(p.id, c.id), COALESCE(p.name, c.name), COALESCE(p.color, c.color), COALESCE(p.icon, c.icon)
     ORDER BY amount DESC
   `, baseParams);
