@@ -4,6 +4,9 @@ import helmet from 'helmet';
 import path from 'path';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import { logger } from './lib/logger';
+import { requestLogger } from './middleware/requestLogger';
+import { auditLog } from './middleware/auditLog';
 import { initializeDatabase } from './db/schema';
 import { errorHandler } from './middleware/errorHandler';
 import { authMiddleware } from './middleware/auth';
@@ -82,6 +85,10 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
+
+// Logging
+app.use(requestLogger);
+app.use(auditLog);
 
 // Health & version (no auth, no rate limit)
 app.get('/api/health', async (_req, res) => {
@@ -241,11 +248,39 @@ app.use(errorHandler);
 // Initialize database and start server
 initializeDatabase()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    const server = app.listen(PORT, () => {
+      logger.info(`Server running on http://localhost:${PORT}`, { env: process.env.NODE_ENV || 'development' });
     });
+
+    // Graceful shutdown
+    const shutdown = async (signal: string) => {
+      logger.info(`${signal} received — shutting down gracefully`);
+
+      server.close(async () => {
+        logger.info('HTTP server closed');
+
+        try {
+          const pool = (await import('./db/connection')).default;
+          await pool.end();
+          logger.info('Database pool closed');
+        } catch (err) {
+          logger.error('Error closing database pool', { error: (err as Error).message });
+        }
+
+        process.exit(0);
+      });
+
+      // Force exit after 10s if graceful shutdown stalls
+      setTimeout(() => {
+        logger.error('Graceful shutdown timed out — forcing exit');
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   })
   .catch((err) => {
-    console.error('Failed to initialize database:', err);
+    logger.error('Failed to initialize database', { error: err.message });
     process.exit(1);
   });
