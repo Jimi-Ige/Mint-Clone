@@ -8,6 +8,7 @@ import BudgetPage from './pages/BudgetPage';
 import GoalsPage from './pages/GoalsPage';
 import SettingsPage from './pages/SettingsPage';
 import RecurringPage from './pages/RecurringPage';
+import InsightsPage from './pages/InsightsPage';
 import LoginPage from './pages/LoginPage';
 
 function AppRoutes() {
@@ -31,6 +32,7 @@ function AppRoutes() {
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/recurring" element={<RecurringPage />} />
+        <Route path="/insights" element={<InsightsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>
