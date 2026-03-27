@@ -13,6 +13,7 @@ import OfflineBanner from './components/ui/OfflineBanner';
 import { DashboardSkeleton } from './components/ui/Skeleton';
 import { useSessionCheck } from './hooks/useSessionCheck';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import PWAUpdatePrompt from './components/ui/PWAUpdatePrompt';
 
 // Lazy-loaded route pages
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -69,6 +70,7 @@ function AppRoutes() {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
+      <PWAUpdatePrompt />
     </>
   );
 }
