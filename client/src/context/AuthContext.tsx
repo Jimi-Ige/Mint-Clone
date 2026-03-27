@@ -5,6 +5,10 @@ export interface UserPreferences {
   defaultPage?: string;
   compactMode?: boolean;
   showCents?: boolean;
+  emailNotifications?: boolean;
+  budgetAlerts?: boolean;
+  billReminders?: boolean;
+  reminderDays?: number;
 }
 
 interface User {
