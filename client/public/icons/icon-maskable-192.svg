@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Solid background fills entire canvas for maskable safe zone -->
+  <rect width="192" height="192" fill="#10b981"/>
+  <!-- Content within 80% safe zone (centered in ~154x154 area) -->
+  <text x="96" y="122" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="96" font-weight="700" fill="white" letter-spacing="-3">M</text>
+</svg>
