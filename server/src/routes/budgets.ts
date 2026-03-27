@@ -9,15 +9,27 @@ router.get('/', async (req: AuthRequest, res) => {
   const m = month || new Date().getMonth() + 1;
   const y = year || new Date().getFullYear();
 
+  // Split-aware: count split allocations when a transaction is split
   const { rows } = await pool.query(`
     SELECT b.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
       c.parent_id,
       COALESCE((
+        -- Non-split transactions
         SELECT SUM(t.amount) FROM transactions t
         WHERE t.category_id IN (SELECT id FROM categories WHERE id = b.category_id OR parent_id = b.category_id)
         AND t.type = 'expense'
         AND EXTRACT(MONTH FROM t.date) = b.month
         AND EXTRACT(YEAR FROM t.date) = b.year
+        AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
+      ), 0) + COALESCE((
+        -- Split allocations matching this budget's category
+        SELECT SUM(s.amount) FROM transaction_splits s
+        JOIN transactions t ON s.transaction_id = t.id
+        WHERE s.category_id IN (SELECT id FROM categories WHERE id = b.category_id OR parent_id = b.category_id)
+        AND t.type = 'expense'
+        AND EXTRACT(MONTH FROM t.date) = b.month
+        AND EXTRACT(YEAR FROM t.date) = b.year
+        AND t.user_id = $1
       ), 0) as spent
     FROM budgets b
     LEFT JOIN categories c ON b.category_id = c.id

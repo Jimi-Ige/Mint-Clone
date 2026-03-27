@@ -113,6 +113,18 @@ export async function initializeDatabase() {
         UNIQUE(user_id, name)
       );
 
+      CREATE TABLE IF NOT EXISTS transaction_splits (
+        id SERIAL PRIMARY KEY,
+        transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+        category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+        amount NUMERIC(12,2) NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_splits_transaction ON transaction_splits(transaction_id);
+      CREATE INDEX IF NOT EXISTS idx_splits_category ON transaction_splits(category_id);
+
       CREATE INDEX IF NOT EXISTS idx_filter_presets_user ON filter_presets(user_id);
       CREATE INDEX IF NOT EXISTS idx_tags_user ON tags(user_id);
       CREATE INDEX IF NOT EXISTS idx_transaction_tags_tx ON transaction_tags(transaction_id);

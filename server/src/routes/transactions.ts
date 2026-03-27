@@ -47,7 +47,16 @@ router.get('/', async (req: AuthRequest, res) => {
               FROM transaction_tags tt JOIN tags tg ON tt.tag_id = tg.id
               WHERE tt.transaction_id = t.id),
              '[]'::json
-           ) AS tags
+           ) AS tags,
+           COALESCE(
+             (SELECT json_agg(json_build_object(
+                'id', s.id, 'category_id', s.category_id, 'amount', s.amount, 'description', s.description,
+                'category_name', sc.name, 'category_icon', sc.icon, 'category_color', sc.color
+              ) ORDER BY s.amount DESC)
+              FROM transaction_splits s LEFT JOIN categories sc ON s.category_id = sc.id
+              WHERE s.transaction_id = t.id),
+             '[]'::json
+           ) AS splits
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     LEFT JOIN accounts a ON t.account_id = a.id

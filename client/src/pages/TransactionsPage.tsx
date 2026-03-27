@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
-import { Transaction, Category, Account, Tag, FilterPreset, TransactionFilters } from '../types';
+import { Transaction, TransactionSplit, Category, Account, Tag, FilterPreset, TransactionFilters } from '../types';
 import { useApi } from '../hooks/useApi';
 import Modal from '../components/ui/Modal';
-import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight, Tag as TagIcon, X, SlidersHorizontal, Save, ChevronDown, ChevronUp, ArrowUpDown, Calendar, DollarSign, Bookmark } from 'lucide-react';
+import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight, Tag as TagIcon, X, SlidersHorizontal, Save, ChevronDown, ChevronUp, ArrowUpDown, Calendar, DollarSign, Bookmark, Scissors } from 'lucide-react';
 import CsvImport from '../components/transactions/CsvImport';
 
 const defaultFilters: TransactionFilters = {
@@ -217,6 +217,93 @@ export default function TransactionsPage() {
       setCategorizeResult(err.message || 'Transfer detection failed');
     } finally {
       setDetectingTransfers(false);
+    }
+  };
+
+  // Split transaction state
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
+  const [splitTx, setSplitTx] = useState<Transaction | null>(null);
+  const [splitRows, setSplitRows] = useState<{ category_id: string; amount: string; description: string }[]>([]);
+  const [splitError, setSplitError] = useState('');
+
+  const openSplit = (tx: Transaction) => {
+    setSplitTx(tx);
+    setSplitError('');
+    if (tx.splits && tx.splits.length > 0) {
+      setSplitRows(tx.splits.map(s => ({
+        category_id: s.category_id?.toString() || '',
+        amount: s.amount.toString(),
+        description: s.description || '',
+      })));
+    } else {
+      // Start with two empty rows, pre-fill first with existing category and half amount
+      const half = (tx.amount / 2).toFixed(2);
+      setSplitRows([
+        { category_id: tx.category_id?.toString() || '', amount: half, description: '' },
+        { category_id: '', amount: (tx.amount - parseFloat(half)).toFixed(2), description: '' },
+      ]);
+    }
+    setSplitModalOpen(true);
+  };
+
+  const addSplitRow = () => {
+    setSplitRows(prev => [...prev, { category_id: '', amount: '', description: '' }]);
+  };
+
+  const removeSplitRow = (idx: number) => {
+    if (splitRows.length <= 2) return;
+    setSplitRows(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateSplitRow = (idx: number, field: string, value: string) => {
+    setSplitRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+  };
+
+  const splitRemaining = useMemo(() => {
+    if (!splitTx) return 0;
+    const allocated = splitRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+    return splitTx.amount - allocated;
+  }, [splitTx, splitRows]);
+
+  const handleSaveSplit = async () => {
+    if (!splitTx) return;
+    setSplitError('');
+
+    // Validate
+    for (const row of splitRows) {
+      if (!row.amount || parseFloat(row.amount) <= 0) {
+        setSplitError('All split amounts must be greater than 0');
+        return;
+      }
+    }
+    if (Math.abs(splitRemaining) > 0.01) {
+      setSplitError(`Splits must sum to ${formatCurrency(splitTx.amount)}. Remaining: ${formatCurrency(Math.abs(splitRemaining))}`);
+      return;
+    }
+
+    try {
+      await api.put(`/splits/${splitTx.id}`, {
+        splits: splitRows.map(r => ({
+          category_id: r.category_id ? Number(r.category_id) : null,
+          amount: parseFloat(r.amount),
+          description: r.description,
+        })),
+      });
+      setSplitModalOpen(false);
+      fetchTransactions();
+    } catch (err: any) {
+      setSplitError(err.message || 'Failed to save split');
+    }
+  };
+
+  const handleUnsplit = async () => {
+    if (!splitTx) return;
+    try {
+      await api.put(`/splits/${splitTx.id}`, { splits: [] });
+      setSplitModalOpen(false);
+      fetchTransactions();
+    } catch (err: any) {
+      setSplitError(err.message || 'Failed to unsplit');
     }
   };
 
@@ -507,7 +594,13 @@ export default function TransactionsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-sm truncate">{tx.description || 'Untitled'}</p>
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
-                      <span>{tx.category_name || 'Uncategorized'}</span>
+                      {tx.splits && tx.splits.length > 0 ? (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400 text-[10px] font-medium">
+                          <Scissors className="w-2.5 h-2.5" /> Split ({tx.splits.length})
+                        </span>
+                      ) : (
+                        <span>{tx.category_name || 'Uncategorized'}</span>
+                      )}
                       {tx.is_transfer && (
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-medium">
                           <ArrowLeftRight className="w-2.5 h-2.5" /> Transfer
@@ -590,6 +683,9 @@ export default function TransactionsPage() {
                     {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, tx.account_currency)}
                   </span>
                   <div className="hidden sm:flex items-center gap-1">
+                    <button onClick={() => openSplit(tx)} className="p-1.5 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 text-gray-400 hover:text-violet-500" title="Split transaction">
+                      <Scissors className="w-4 h-4" />
+                    </button>
                     <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
                       <Edit2 className="w-4 h-4" />
                     </button>
@@ -700,6 +796,104 @@ export default function TransactionsPage() {
 
       {/* CSV Import Modal */}
       <CsvImport open={importOpen} onClose={() => setImportOpen(false)} onSuccess={fetchTransactions} />
+
+      {/* Split Transaction Modal */}
+      <Modal open={splitModalOpen} onClose={() => setSplitModalOpen(false)} title="Split Transaction">
+        {splitTx && (
+          <div className="space-y-4">
+            {/* Transaction info */}
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+              <p className="font-medium text-sm">{splitTx.description || 'Untitled'}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Total: <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(splitTx.amount, splitTx.account_currency)}</span>
+                <span className="mx-1">&middot;</span>
+                {formatDate(splitTx.date)}
+              </p>
+            </div>
+
+            {/* Split rows */}
+            <div className="space-y-3">
+              {splitRows.map((row, idx) => (
+                <div key={idx} className="flex gap-2 items-start">
+                  <div className="flex-1 space-y-1.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={row.category_id}
+                        onChange={e => updateSplitRow(idx, 'category_id', e.target.value)}
+                        className="input text-sm"
+                      >
+                        <option value="">Category</option>
+                        {groupedCategoryOptions
+                          .filter(c => !splitTx.type || c.type === splitTx.type)
+                          .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Amount"
+                        value={row.amount}
+                        onChange={e => updateSplitRow(idx, 'amount', e.target.value)}
+                        className="input text-sm"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Note (optional)"
+                      value={row.description}
+                      onChange={e => updateSplitRow(idx, 'description', e.target.value)}
+                      className="input text-sm"
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeSplitRow(idx)}
+                    disabled={splitRows.length <= 2}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 disabled:opacity-30 mt-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add row */}
+            <button onClick={addSplitRow} className="text-sm text-primary-500 hover:text-primary-600 font-medium flex items-center gap-1">
+              <Plus className="w-4 h-4" /> Add Split
+            </button>
+
+            {/* Remaining indicator */}
+            <div className={`text-sm font-medium text-center py-2 rounded-lg ${
+              Math.abs(splitRemaining) < 0.01
+                ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+            }`}>
+              {Math.abs(splitRemaining) < 0.01
+                ? 'Splits balanced'
+                : `Remaining: ${formatCurrency(splitRemaining, splitTx.account_currency)}`}
+            </div>
+
+            {splitError && (
+              <p className="text-sm text-rose-500">{splitError}</p>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveSplit}
+                disabled={Math.abs(splitRemaining) > 0.01}
+                className="btn-primary flex-1 disabled:opacity-50"
+              >
+                Save Split
+              </button>
+              {splitTx.splits && splitTx.splits.length > 0 && (
+                <button onClick={handleUnsplit} className="btn-secondary text-sm">
+                  Unsplit
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

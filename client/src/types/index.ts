@@ -47,6 +47,7 @@ export interface Transaction {
   is_transfer?: boolean;
   transfer_pair_id?: number | null;
   tags?: Tag[];
+  splits?: TransactionSplit[];
   created_at: string;
   category_name?: string;
   category_icon?: string;
@@ -130,6 +131,16 @@ export interface RecurringPattern {
   account_name?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TransactionSplit {
+  id: number;
+  category_id: number | null;
+  amount: number;
+  description: string;
+  category_name?: string;
+  category_icon?: string;
+  category_color?: string;
 }
 
 export interface DashboardData {
