@@ -37,6 +37,10 @@ export const preferencesSchema = z.object({
     defaultPage: z.string().max(50).optional(),
     compactMode: z.boolean().optional(),
     showCents: z.boolean().optional(),
+    emailNotifications: z.boolean().optional(),
+    budgetAlerts: z.boolean().optional(),
+    billReminders: z.boolean().optional(),
+    reminderDays: z.number().int().min(1).max(14).optional(),
   }),
 });
 

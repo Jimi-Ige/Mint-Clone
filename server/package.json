@@ -24,6 +24,7 @@
     "pdfkit": "^0.18.0",
     "pg": "^8.20.0",
     "plaid": "^41.4.0",
+    "resend": "^6.9.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {

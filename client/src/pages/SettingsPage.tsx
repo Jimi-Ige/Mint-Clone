@@ -3,7 +3,7 @@ import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
 import { Category, Account, Institution, Tag, CurrencyInfo } from '../types';
 import Modal from '../components/ui/Modal';
-import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown, Globe, User, Lock, Settings2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown, Globe, User, Lock, Settings2, Bell } from 'lucide-react';
 import PlaidLinkButton from '../components/settings/PlaidLink';
 import ConnectedAccounts from '../components/settings/ConnectedAccounts';
 import { useAuth } from '../context/AuthContext';
@@ -294,6 +294,64 @@ export default function SettingsPage() {
             </label>
           </div>
           {prefsSaving && <p className="text-xs text-gray-400">Saving...</p>}
+        </div>
+      </section>
+
+      {/* Notifications */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2"><Bell className="w-5 h-5" /> Email Notifications</h2>
+        </div>
+        <div className="card p-4 space-y-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={prefs.emailNotifications || false}
+              onChange={e => handlePrefsUpdate('emailNotifications', e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600 text-primary-500 focus:ring-primary-500"
+            />
+            <div>
+              <span className="text-sm font-medium">Enable email notifications</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Receive alerts for budgets, bills, and spending</p>
+            </div>
+          </label>
+          {prefs.emailNotifications && (
+            <div className="pl-8 space-y-3 border-l-2 border-primary-200 dark:border-primary-800 ml-1.5">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={prefs.budgetAlerts !== false}
+                  onChange={e => handlePrefsUpdate('budgetAlerts', e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-sm">Budget alerts (80% and 100% thresholds)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={prefs.billReminders !== false}
+                  onChange={e => handlePrefsUpdate('billReminders', e.target.checked)}
+                  className="rounded border-gray-300 dark:border-gray-600 text-primary-500 focus:ring-primary-500"
+                />
+                <span className="text-sm">Bill reminders</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600 dark:text-gray-400">Remind me</label>
+                <select
+                  value={prefs.reminderDays ?? 3}
+                  onChange={e => handlePrefsUpdate('reminderDays', parseInt(e.target.value))}
+                  className="input w-auto text-sm py-1"
+                >
+                  <option value={1}>1 day</option>
+                  <option value={2}>2 days</option>
+                  <option value={3}>3 days</option>
+                  <option value={5}>5 days</option>
+                  <option value={7}>7 days</option>
+                </select>
+                <span className="text-sm text-gray-600 dark:text-gray-400">before bills are due</span>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
