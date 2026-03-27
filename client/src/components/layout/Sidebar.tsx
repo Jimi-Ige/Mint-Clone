@@ -60,13 +60,14 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           {/* Mobile close button */}
           <button
             onClick={onMobileClose}
+            aria-label="Close navigation"
             className="ml-auto p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 md:hidden"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
+        <nav aria-label="Main navigation" className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
           {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -90,6 +91,8 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         {/* Collapse toggle — desktop only */}
         <button
           onClick={() => setCollapsed(!collapsed)}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
           className="hidden md:flex items-center justify-center h-12 border-t border-gray-200 dark:border-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}

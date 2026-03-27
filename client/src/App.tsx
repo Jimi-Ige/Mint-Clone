@@ -13,6 +13,7 @@ import OfflineBanner from './components/ui/OfflineBanner';
 import { DashboardSkeleton } from './components/ui/Skeleton';
 import { useSessionCheck } from './hooks/useSessionCheck';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useRouteFocus } from './hooks/useRouteFocus';
 import PWAUpdatePrompt from './components/ui/PWAUpdatePrompt';
 
 // Lazy-loaded route pages
@@ -37,6 +38,7 @@ function AppRoutes() {
   const { user, loading } = useAuth();
   const { expired, handleExpiredLogout } = useSessionCheck();
   const online = useOnlineStatus();
+  useRouteFocus();
 
   if (loading) {
     return (
