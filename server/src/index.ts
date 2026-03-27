@@ -74,6 +74,25 @@ app.use(limiter);
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
+// Health & version (no auth, no rate limit)
+app.get('/api/health', async (_req, res) => {
+  try {
+    const pool = (await import('./db/connection')).default;
+    await pool.query('SELECT 1');
+    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'unhealthy', timestamp: new Date().toISOString() });
+  }
+});
+
+app.get('/api/version', (_req, res) => {
+  res.json({
+    version: process.env.npm_package_version || '1.0.0',
+    node: process.version,
+    env: process.env.NODE_ENV || 'development',
+  });
+});
+
 // Public routes
 app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/webhooks', webhooksRouter);
