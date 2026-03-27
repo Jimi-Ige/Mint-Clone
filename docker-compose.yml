@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mint
+      POSTGRES_PASSWORD: mint_dev_password
+      POSTGRES_DB: mint_clone
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mint -d mint_clone"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://mint:mint_dev_password@db:5432/mint_clone
+      JWT_SECRET: docker-dev-secret-change-in-production
+      PORT: 3000
+      NODE_ENV: production
+      # Optional — add your keys to use Plaid/AI features:
+      # PLAID_CLIENT_ID: your-plaid-client-id
+      # PLAID_SECRET: your-plaid-secret
+      # PLAID_ENV: sandbox
+      # ANTHROPIC_API_KEY: your-anthropic-key
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
