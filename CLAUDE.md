@@ -5,12 +5,14 @@ A Mint-inspired personal finance tracker with Plaid bank integration, AI-powered
 
 ## Tech Stack
 - **Frontend**: React 18 + Vite + TypeScript + Tailwind CSS + Recharts + Lucide icons
-- **Backend**: Express.js + TypeScript
-- **Database**: SQLite (migrating to Azure PostgreSQL in Phase 1)
+- **Backend**: Express.js + TypeScript + Zod validation + Helmet
+- **Database**: PostgreSQL (Azure Database for PostgreSQL, Flexible Server)
 - **Bank Integration**: Plaid API (Node SDK)
 - **AI Categorization**: Anthropic Claude API
-- **Deployment**: Azure App Service + Azure PostgreSQL + Azure Key Vault
+- **Deployment**: Azure App Service (F1) + Azure PostgreSQL (B1ms) + Azure Key Vault
 - **Monorepo**: npm workspaces (`client/`, `server/`)
+- **Testing**: Vitest (server + client)
+- **Containerization**: Docker multi-stage build + docker-compose
 
 ## Architecture
 ```
@@ -46,18 +48,19 @@ npm run dev          # Start both client (5173) and server (3000) concurrently
 Vite proxies `/api` requests to the Express server in development.
 
 ## Current State
-- v1 complete: Dashboard, Transactions (CRUD + filters + pagination), Budget, Goals, Settings
-- Notion integration: Mirror databases created in Notion workspace
-- Seeded with 6 months of sample data, 15 categories, 1 default account
+- v1-v4 complete: Full-featured personal finance tracker
+- Auth (JWT), Plaid integration, AI categorization, analytics, reports
+- Docker + CI/CD, database migrations, Azure deployment, monitoring/logging
+- Security hardened (Zod, Helmet, rate limiting, session management)
+- Testing suite (Vitest for server + client)
 
 ## Implementation Plan
 See `PLAN.md` at the project root for the full phased roadmap.
-The plan is also saved in Claude memory for cross-session reference.
 
 ## Key Decisions
 - Plaid is central to the product — not optional. Real bank data is the core value.
 - AI categorization uses flat ~20 categories in v1 (not 55 subcategories).
 - Auth is a hard prerequisite before Plaid integration (access tokens are permanent bank credentials).
 - NL-to-SQL was explicitly cut for security reasons.
-- SQLite → PostgreSQL migration happens in Phase 1 before any Plaid work.
 - All secrets (Plaid tokens, API keys) go through Azure Key Vault, never .env in production.
+- Single-user deployment: App Service F1 (free) + PostgreSQL B1ms (~$12/mo).
