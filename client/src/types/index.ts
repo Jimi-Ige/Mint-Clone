@@ -160,6 +160,68 @@ export interface FilterPreset {
   created_at: string;
 }
 
+// Analytics types
+export interface SpendingTrendMonth {
+  month: string;
+  categories: { name: string; color: string; amount: number }[];
+}
+
+export interface PeriodComparison {
+  currentPeriod: { start: string; end: string };
+  previousPeriod: { start: string; end: string };
+  totals: {
+    currentExpenses: number;
+    previousExpenses: number;
+    currentIncome: number;
+    previousIncome: number;
+  };
+  categories: {
+    name: string;
+    color: string;
+    icon: string;
+    currentAmount: number;
+    previousAmount: number;
+    change: number;
+  }[];
+}
+
+export interface SpendingAnomaly {
+  id: number;
+  description: string;
+  merchantName: string | null;
+  amount: number;
+  date: string;
+  categoryName: string;
+  categoryColor: string;
+  categoryIcon: string;
+  accountName: string;
+  avgAmount: number;
+  multiple: number;
+}
+
+export interface DailySpendingData {
+  month: string;
+  days: {
+    date: string;
+    day: number;
+    dayOfWeek: string;
+    expenses: number;
+    income: number;
+    transactionCount: number;
+    runningTotal?: number;
+    dailyAverage?: number;
+  }[];
+  totalExpenses: number;
+  avgDailySpend: number;
+}
+
+export interface CategoryBreakdown {
+  category: { name: string; color: string; icon: string };
+  monthlyTotals: { month: string; amount: number; transactionCount: number }[];
+  topMerchants: { name: string; amount: number; count: number }[];
+  subcategories: { name: string; color: string; icon: string; amount: number; transactionCount: number }[];
+}
+
 export interface TransactionFilters {
   search?: string;
   type?: string;

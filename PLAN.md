@@ -176,7 +176,7 @@ React SPA (Vite)  →  Azure App Service (Express API)  →  Azure PostgreSQL
 | Phase | Feature | Status |
 |-------|---------|--------|
 | v3.1 | Search & advanced filters (date range, amount range, multi-select, saved presets, sort) | Done |
-| v3.2 | Spending insights & analytics (trends, comparisons, anomaly detection) | Planned |
+| v3.2 | Spending insights & analytics (trends, comparisons, anomaly detection) | Done |
 | v3.3 | Split transactions (multi-category allocation) | Planned |
 | v3.4 | Scheduled/recurring transactions (auto-create from patterns) | Planned |
 | v3.5 | Data export & reports (PDF statements, custom date ranges) | Planned |
