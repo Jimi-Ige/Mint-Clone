@@ -11,6 +11,7 @@ import RecurringPage from './pages/RecurringPage';
 import InsightsPage from './pages/InsightsPage';
 import ReportsPage from './pages/ReportsPage';
 import LoginPage from './pages/LoginPage';
+import OnboardingWizard from './components/onboarding/OnboardingWizard';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -24,6 +25,8 @@ function AppRoutes() {
   }
 
   if (!user) return <LoginPage />;
+
+  if (!user.onboarding_completed) return <OnboardingWizard />;
 
   return (
     <Routes>

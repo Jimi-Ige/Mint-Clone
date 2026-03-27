@@ -3,7 +3,7 @@ import { useApi } from '../hooks/useApi';
 import { api } from '../lib/api';
 import { Category, Account, Institution, Tag, CurrencyInfo } from '../types';
 import Modal from '../components/ui/Modal';
-import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown, Globe } from 'lucide-react';
+import { Plus, Trash2, Edit2, Palette, TagIcon, ChevronRight, ChevronDown, Globe, User, Lock, Settings2 } from 'lucide-react';
 import PlaidLinkButton from '../components/settings/PlaidLink';
 import ConnectedAccounts from '../components/settings/ConnectedAccounts';
 import { useAuth } from '../context/AuthContext';
@@ -11,7 +11,7 @@ import { useAuth } from '../context/AuthContext';
 const colorOptions = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#0ea5e9', '#a855f7', '#f43f5e'];
 
 export default function SettingsPage() {
-  const { user, updateBaseCurrency } = useAuth();
+  const { user, updateBaseCurrency, updateUser } = useAuth();
   const { data: categories, refetch: refetchCats } = useApi<Category[]>('/categories');
   const { data: accounts, refetch: refetchAccounts } = useApi<Account[]>('/accounts');
   const { data: institutions, refetch: refetchInstitutions } = useApi<Institution[]>('/plaid/institutions');
@@ -83,6 +83,52 @@ export default function SettingsPage() {
 
   const deleteTag = async (id: number) => { await api.delete(`/tags/${id}`); refetchTags(); };
 
+  // Profile state
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [profileMsg, setProfileMsg] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  const handleProfileUpdate = async () => {
+    setProfileSaving(true);
+    setProfileMsg('');
+    try {
+      const body: any = {};
+      if (profileName !== user?.name) body.name = profileName;
+      if (newPassword) { body.currentPassword = currentPassword; body.newPassword = newPassword; }
+      if (Object.keys(body).length === 0) { setProfileMsg('No changes'); setProfileSaving(false); return; }
+      const result = await api.put<{ name: string }>('/auth/profile', body);
+      updateUser({ name: result.name });
+      setProfileMsg('Profile updated');
+      setCurrentPassword('');
+      setNewPassword('');
+    } catch (err: any) {
+      setProfileMsg(err.message || 'Update failed');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  // Preferences state
+  const [prefs, setPrefs] = useState(user?.preferences || {});
+  const [prefsSaving, setPrefsSaving] = useState(false);
+
+  const handlePrefsUpdate = async (key: string, value: any) => {
+    const updated = { ...prefs, [key]: value };
+    setPrefs(updated);
+    setPrefsSaving(true);
+    try {
+      await api.put('/auth/preferences', { preferences: { [key]: value } });
+      updateUser({ preferences: updated });
+    } catch {
+      // Revert on failure
+      setPrefs(user?.preferences || {});
+    } finally {
+      setPrefsSaving(false);
+    }
+  };
+
   // Build category tree
   const categoryTree = useMemo(() => {
     if (!categories) return { income: [], expense: [] };
@@ -150,6 +196,101 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 md:space-y-8">
       <h1 className="text-xl md:text-2xl font-bold">Settings</h1>
+
+      {/* Profile */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2"><User className="w-5 h-5" /> Profile</h2>
+        </div>
+        <div className="card p-4 space-y-4">
+          <div>
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Name</label>
+            <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Email</label>
+            <input type="email" value={user?.email || ''} disabled className="input opacity-60" />
+          </div>
+          <div className="border-t border-gray-100 dark:border-gray-700/50 pt-4">
+            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" /> Change Password
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Current Password</label>
+                <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="input text-sm" placeholder="Current password" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">New Password</label>
+                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="input text-sm" placeholder="New password (min 6 chars)" />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={handleProfileUpdate} disabled={profileSaving} className="btn-primary text-sm">
+              {profileSaving ? 'Saving...' : 'Save Profile'}
+            </button>
+            {profileMsg && <span className="text-sm text-gray-500">{profileMsg}</span>}
+          </div>
+        </div>
+      </section>
+
+      {/* Preferences */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2"><Settings2 className="w-5 h-5" /> Preferences</h2>
+        </div>
+        <div className="card p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Date Format</label>
+              <select
+                value={prefs.dateFormat || 'MM/DD/YYYY'}
+                onChange={e => handlePrefsUpdate('dateFormat', e.target.value)}
+                className="input"
+              >
+                <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">Default Page</label>
+              <select
+                value={prefs.defaultPage || '/'}
+                onChange={e => handlePrefsUpdate('defaultPage', e.target.value)}
+                className="input"
+              >
+                <option value="/">Dashboard</option>
+                <option value="/transactions">Transactions</option>
+                <option value="/budget">Budget</option>
+                <option value="/insights">Insights</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={prefs.compactMode || false}
+                onChange={e => handlePrefsUpdate('compactMode', e.target.checked)}
+                className="rounded border-gray-300 dark:border-gray-600 text-primary-500 focus:ring-primary-500"
+              />
+              <span className="text-sm">Compact mode</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={prefs.showCents !== false}
+                onChange={e => handlePrefsUpdate('showCents', e.target.checked)}
+                className="rounded border-gray-300 dark:border-gray-600 text-primary-500 focus:ring-primary-500"
+              />
+              <span className="text-sm">Show cents</span>
+            </label>
+          </div>
+          {prefsSaving && <p className="text-xs text-gray-400">Saving...</p>}
+        </div>
+      </section>
 
       {/* Display Currency */}
       <section>

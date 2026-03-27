@@ -178,6 +178,17 @@ export async function initializeDatabase() {
 
       CREATE INDEX IF NOT EXISTS idx_exchange_rates_lookup ON exchange_rates(base_currency, date);
 
+      -- User preferences JSONB column
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'preferences') THEN
+          ALTER TABLE users ADD COLUMN preferences JSONB NOT NULL DEFAULT '{}';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'onboarding_completed') THEN
+          ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE;
+        END IF;
+      END $$;
+
       -- Multi-currency: add base_currency to users
       DO $$
       BEGIN

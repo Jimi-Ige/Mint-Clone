@@ -49,7 +49,7 @@ app.use('/api/auth', authRouter);
 app.get('/api/auth/me', authMiddleware, async (req: any, res) => {
   try {
     const pool = (await import('./db/connection')).default;
-    const result = await pool.query('SELECT id, email, name, base_currency, created_at FROM users WHERE id = $1', [req.userId]);
+    const result = await pool.query('SELECT id, email, name, base_currency, preferences, onboarding_completed, created_at FROM users WHERE id = $1', [req.userId]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
 
@@ -73,6 +73,82 @@ app.get('/api/auth/me', authMiddleware, async (req: any, res) => {
     }
   } catch {
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// Profile & preferences (protected)
+app.put('/api/auth/profile', authMiddleware, async (req: any, res) => {
+  try {
+    const pool = (await import('./db/connection')).default;
+    const { name, currentPassword, newPassword } = req.body;
+    const updates: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (name) {
+      updates.push(`name = $${idx++}`);
+      values.push(name);
+    }
+
+    if (newPassword) {
+      if (!currentPassword) return res.status(400).json({ error: 'Current password is required' });
+      const userResult = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
+      const bcrypt = (await import('bcrypt')).default;
+      const valid = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
+      if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
+      if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+      const hash = await bcrypt.hash(newPassword, 12);
+      updates.push(`password_hash = $${idx++}`);
+      values.push(hash);
+    }
+
+    if (updates.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+    values.push(req.userId);
+    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values);
+
+    const result = await pool.query('SELECT id, email, name, base_currency, preferences, onboarding_completed FROM users WHERE id = $1', [req.userId]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+app.get('/api/auth/preferences', authMiddleware, async (req: any, res) => {
+  try {
+    const pool = (await import('./db/connection')).default;
+    const result = await pool.query('SELECT preferences FROM users WHERE id = $1', [req.userId]);
+    res.json(result.rows[0]?.preferences || {});
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch preferences' });
+  }
+});
+
+app.put('/api/auth/preferences', authMiddleware, async (req: any, res) => {
+  try {
+    const pool = (await import('./db/connection')).default;
+    const { preferences } = req.body;
+    if (!preferences || typeof preferences !== 'object') return res.status(400).json({ error: 'preferences object required' });
+    // Merge with existing preferences
+    await pool.query(
+      `UPDATE users SET preferences = preferences || $1::jsonb WHERE id = $2`,
+      [JSON.stringify(preferences), req.userId]
+    );
+    const result = await pool.query('SELECT preferences FROM users WHERE id = $1', [req.userId]);
+    res.json(result.rows[0].preferences);
+  } catch {
+    res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
+app.put('/api/auth/onboarding', authMiddleware, async (req: any, res) => {
+  try {
+    const pool = (await import('./db/connection')).default;
+    await pool.query('UPDATE users SET onboarding_completed = TRUE WHERE id = $1', [req.userId]);
+    res.json({ onboarding_completed: true });
+  } catch {
+    res.status(500).json({ error: 'Failed to update onboarding status' });
   }
 });
 
