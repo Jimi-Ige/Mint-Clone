@@ -32,6 +32,7 @@ import splitsRouter from './routes/splits';
 import reportsRouter from './routes/reports';
 import webhooksRouter from './routes/webhooks';
 import notificationsRouter from './routes/notifications';
+import privacyRouter from './routes/privacy';
 import { checkNotifications } from './services/notifications';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -238,6 +239,7 @@ app.use('/api/analytics', authMiddleware, analyticsRouter);
 app.use('/api/splits', authMiddleware, splitsRouter);
 app.use('/api/reports', authMiddleware, reportsRouter);
 app.use('/api/notifications', authMiddleware, notificationsRouter);
+app.use('/api/privacy', authMiddleware, privacyRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');
