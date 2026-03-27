@@ -3,7 +3,11 @@ import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/formatters';
 import { Transaction, TransactionSplit, Category, Account, Tag, FilterPreset, TransactionFilters } from '../types';
 import { useApi } from '../hooks/useApi';
+import { useDebounce } from '../hooks/useDebounce';
 import Modal from '../components/ui/Modal';
+import EmptyState from '../components/ui/EmptyState';
+import { TransactionsSkeleton } from '../components/ui/Skeleton';
+import { useToast } from '../components/ui/Toast';
 import { Plus, Search, ArrowUpRight, ArrowDownRight, Trash2, Edit2, Sparkles, Download, Upload, MoreHorizontal, ArrowLeftRight, Tag as TagIcon, X, SlidersHorizontal, Save, ChevronDown, ChevronUp, ArrowUpDown, Calendar, DollarSign, Bookmark, Scissors } from 'lucide-react';
 import CsvImport from '../components/transactions/CsvImport';
 
@@ -37,8 +41,12 @@ export default function TransactionsPage() {
   const [showPresetSave, setShowPresetSave] = useState(false);
   const [showPresetList, setShowPresetList] = useState(false);
 
+  const { toast } = useToast();
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
+
+  // Debounce search to avoid excessive API calls
+  const debouncedSearch = useDebounce(filters.search, 300);
 
   useEffect(() => {
     api.get<string[]>('/transactions/categories-ai').then(setAiCategories).catch(() => {});
@@ -49,7 +57,7 @@ export default function TransactionsPage() {
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: '15' });
-    if (filters.search) params.set('search', filters.search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (filters.type) params.set('type', filters.type);
     if (filters.categoryId) params.set('categoryId', filters.categoryId);
     if (filters.tagId) params.set('tagId', filters.tagId);
@@ -64,7 +72,7 @@ export default function TransactionsPage() {
     setTransactions(res.transactions);
     setTotal(res.total);
     setLoading(false);
-  }, [page, filters]);
+  }, [page, debouncedSearch, filters.type, filters.categoryId, filters.tagId, filters.accountId, filters.startDate, filters.endDate, filters.amountMin, filters.amountMax, filters.isTransfer, filters.sort]);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
 
@@ -140,18 +148,29 @@ export default function TransactionsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const body = { ...form, account_id: Number(form.account_id), category_id: form.category_id ? Number(form.category_id) : null, amount: Number(form.amount) };
-    if (editing) {
-      await api.put(`/transactions/${editing.id}`, body);
-    } else {
-      await api.post('/transactions', body);
+    try {
+      if (editing) {
+        await api.put(`/transactions/${editing.id}`, body);
+        toast('Transaction updated');
+      } else {
+        await api.post('/transactions', body);
+        toast('Transaction created');
+      }
+      setModalOpen(false);
+      fetchTransactions();
+    } catch (err: any) {
+      toast(err.message || 'Failed to save transaction', 'error');
     }
-    setModalOpen(false);
-    fetchTransactions();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/transactions/${id}`);
-    fetchTransactions();
+    try {
+      await api.delete(`/transactions/${id}`);
+      toast('Transaction deleted');
+      fetchTransactions();
+    } catch (err: any) {
+      toast(err.message || 'Failed to delete', 'error');
+    }
   };
 
   const handleExport = () => {
@@ -343,7 +362,7 @@ export default function TransactionsPage() {
   };
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 slide-up">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl md:text-2xl font-bold">Transactions</h1>
@@ -573,12 +592,18 @@ export default function TransactionsPage() {
       {/* Transaction List */}
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-400">Loading...</div>
+          <TransactionsSkeleton />
         ) : transactions.length === 0 ? (
-          <div className="p-8 md:p-12 text-center text-gray-400">
-            <p className="text-lg font-medium mb-1">No transactions found</p>
-            <p className="text-sm">{activeFilterCount > 0 ? 'Try adjusting your filters' : 'Add your first transaction to get started'}</p>
-          </div>
+          <EmptyState
+            icon={ArrowLeftRight}
+            title="No transactions found"
+            description={activeFilterCount > 0 ? 'Try adjusting your filters' : 'Add your first transaction to get started'}
+            action={activeFilterCount === 0 ? (
+              <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Add Transaction
+              </button>
+            ) : undefined}
+          />
         ) : (
           <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
             {transactions.map(tx => (

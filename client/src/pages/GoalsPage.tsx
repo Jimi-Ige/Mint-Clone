@@ -7,13 +7,17 @@ import ProgressBar from '../components/ui/ProgressBar';
 import Modal from '../components/ui/Modal';
 import { Plus, Trash2, DollarSign, Trophy, Target } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import EmptyState from '../components/ui/EmptyState';
+import { useToast } from '../components/ui/Toast';
+import { ListPageSkeleton } from '../components/ui/Skeleton';
 
 const goalColors = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#14b8a6', '#f97316'];
 
 export default function GoalsPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const formatCurrency = useCallback((amount: number) => formatCurrencyRaw(amount, user?.base_currency), [user?.base_currency]);
-  const { data: goals, refetch } = useApi<SavingsGoal[]>('/goals');
+  const { data: goals, loading, refetch } = useApi<SavingsGoal[]>('/goals');
   const [modalOpen, setModalOpen] = useState(false);
   const [contributeModal, setContributeModal] = useState<SavingsGoal | null>(null);
   const [form, setForm] = useState({ name: '', target_amount: '', deadline: '', color: '#10b981' });
@@ -26,30 +30,45 @@ export default function GoalsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.post('/goals', { ...form, target_amount: Number(form.target_amount), deadline: form.deadline || null });
-    setModalOpen(false);
-    refetch();
+    try {
+      await api.post('/goals', { ...form, target_amount: Number(form.target_amount), deadline: form.deadline || null });
+      toast('Goal created');
+      setModalOpen(false);
+      refetch();
+    } catch (err: any) {
+      toast(err.message || 'Failed to create goal', 'error');
+    }
   };
 
   const handleContribute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contributeModal) return;
-    await api.patch(`/goals/${contributeModal.id}/contribute`, { amount: Number(contributeAmount) });
-    setContributeModal(null);
-    setContributeAmount('');
-    refetch();
+    try {
+      await api.patch(`/goals/${contributeModal.id}/contribute`, { amount: Number(contributeAmount) });
+      toast('Funds added');
+      setContributeModal(null);
+      setContributeAmount('');
+      refetch();
+    } catch (err: any) {
+      toast(err.message || 'Failed to add funds', 'error');
+    }
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/goals/${id}`);
-    refetch();
+    try {
+      await api.delete(`/goals/${id}`);
+      toast('Goal deleted');
+      refetch();
+    } catch (err: any) {
+      toast(err.message || 'Failed to delete', 'error');
+    }
   };
 
   const activeGoals = goals?.filter(g => g.status === 'active') || [];
   const completedGoals = goals?.filter(g => g.status === 'completed') || [];
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 slide-up">
       <div className="flex items-center justify-between">
         <h1 className="text-xl md:text-2xl font-bold">Savings Goals</h1>
         <button onClick={openNew} className="btn-primary flex items-center gap-2">
@@ -58,12 +77,15 @@ export default function GoalsPage() {
       </div>
 
       {/* Active Goals */}
-      {activeGoals.length === 0 && completedGoals.length === 0 ? (
-        <div className="card p-12 text-center text-gray-400">
-          <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p className="text-lg font-medium mb-1">No savings goals yet</p>
-          <p className="text-sm">Set your first goal and start saving</p>
-        </div>
+      {loading && !goals ? (
+        <ListPageSkeleton />
+      ) : activeGoals.length === 0 && completedGoals.length === 0 ? (
+        <EmptyState
+          icon={Target}
+          title="No savings goals yet"
+          description="Set your first goal and start saving"
+          action={<button onClick={openNew} className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> New Goal</button>}
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">

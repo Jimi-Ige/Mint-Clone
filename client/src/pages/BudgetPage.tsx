@@ -5,11 +5,15 @@ import { Budget, Category } from '../types';
 import { formatCurrency as formatCurrencyRaw, formatMonth } from '../lib/formatters';
 import ProgressBar from '../components/ui/ProgressBar';
 import Modal from '../components/ui/Modal';
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import EmptyState from '../components/ui/EmptyState';
+import { useToast } from '../components/ui/Toast';
+import { ListPageSkeleton } from '../components/ui/Skeleton';
 
 export default function BudgetPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const formatCurrency = useCallback((amount: number) => formatCurrencyRaw(amount, user?.base_currency), [user?.base_currency]);
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -53,18 +57,29 @@ export default function BudgetPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editing) {
-      await api.put(`/budgets/${editing.id}`, { amount: Number(form.amount) });
-    } else {
-      await api.post('/budgets', { category_id: Number(form.category_id), amount: Number(form.amount), month, year });
+    try {
+      if (editing) {
+        await api.put(`/budgets/${editing.id}`, { amount: Number(form.amount) });
+        toast('Budget updated');
+      } else {
+        await api.post('/budgets', { category_id: Number(form.category_id), amount: Number(form.amount), month, year });
+        toast('Budget created');
+      }
+      setModalOpen(false);
+      refetch();
+    } catch (err: any) {
+      toast(err.message || 'Failed to save budget', 'error');
     }
-    setModalOpen(false);
-    refetch();
   };
 
   const handleDelete = async (id: number) => {
-    await api.delete(`/budgets/${id}`);
-    refetch();
+    try {
+      await api.delete(`/budgets/${id}`);
+      toast('Budget deleted');
+      refetch();
+    } catch (err: any) {
+      toast(err.message || 'Failed to delete', 'error');
+    }
   };
 
   const changeMonth = (delta: number) => {
@@ -77,7 +92,7 @@ export default function BudgetPage() {
   };
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 slide-up">
       <div className="flex items-center justify-between">
         <h1 className="text-xl md:text-2xl font-bold">Budget</h1>
         <button onClick={openNew} className="btn-primary flex items-center gap-2">
@@ -112,11 +127,15 @@ export default function BudgetPage() {
 
       {/* Budget List */}
       <div className="space-y-3">
-        {(!budgets || budgets.length === 0) ? (
-          <div className="card p-12 text-center text-gray-400">
-            <p className="text-lg font-medium mb-1">No budgets set</p>
-            <p className="text-sm">Create your first budget to start tracking spending</p>
-          </div>
+        {!budgets ? (
+          <ListPageSkeleton />
+        ) : budgets.length === 0 ? (
+          <EmptyState
+            icon={Wallet}
+            title="No budgets set"
+            description="Create your first budget to start tracking spending"
+            action={<button onClick={openNew} className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> Add Budget</button>}
+          />
         ) : budgets.map(b => (
           <div key={b.id} className="card p-4 md:p-5">
             <div className="flex items-center justify-between mb-3 gap-2">

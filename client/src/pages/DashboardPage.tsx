@@ -5,7 +5,9 @@ import { DashboardData, Category, Account, RecurringPattern, BalanceSnapshot } f
 import { useApi } from '../hooks/useApi';
 import { formatCurrency as formatCurrencyRaw } from '../lib/formatters';
 import { useAuth } from '../context/AuthContext';
-import { TrendingUp, TrendingDown, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Wallet, Filter, CalendarClock } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, PiggyBank, ArrowUpRight, ArrowDownRight, Wallet, Filter, CalendarClock, LayoutDashboard } from 'lucide-react';
+import { DashboardSkeleton } from '../components/ui/Skeleton';
+import EmptyState from '../components/ui/EmptyState';
 import { Link } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
@@ -102,18 +104,16 @@ export default function DashboardPage() {
   const hasActiveFilters = startDate !== defaults.start || endDate !== defaults.end || selectedAccounts.length > 0 || selectedCategories.length > 0;
 
   if (loading && !data) {
+    return <DashboardSkeleton />;
+  }
+
+  if (!loading && !data) {
     return (
-      <div className="space-y-4 md:space-y-6">
-        <h1 className="text-xl md:text-2xl font-bold">Dashboard</h1>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="card p-4 md:p-6 animate-pulse">
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20 mb-3" />
-              <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-28" />
-            </div>
-          ))}
-        </div>
-      </div>
+      <EmptyState
+        icon={LayoutDashboard}
+        title="No dashboard data"
+        description="Add some transactions to see your financial overview here."
+      />
     );
   }
 
@@ -128,7 +128,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 slide-up">
       <div className="flex items-center justify-between">
         <h1 className="text-xl md:text-2xl font-bold">Dashboard</h1>
         <div className="flex items-center gap-2">

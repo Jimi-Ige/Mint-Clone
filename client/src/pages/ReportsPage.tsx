@@ -128,7 +128,7 @@ export default function ReportsPage() {
   ];
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 slide-up">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl md:text-2xl font-bold">Reports</h1>
       </div>
