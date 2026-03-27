@@ -420,7 +420,7 @@ export default function SettingsPage() {
                 <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{a.type} &middot; {a.currency}</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold">${a.balance.toFixed(2)}</span>
+                <span className="font-semibold">${Number(a.balance).toFixed(2)}</span>
                 <button onClick={() => deleteAcc(a.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500">
                   <Trash2 className="w-4 h-4" />
                 </button>
