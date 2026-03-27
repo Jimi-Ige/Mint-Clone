@@ -7,6 +7,7 @@ import Modal from '../components/ui/Modal';
 import {
   Plus, Repeat, Sparkles, Pause, Play, Trash2, Edit2,
   CalendarClock, TrendingUp, TrendingDown, AlertCircle, Check,
+  CreditCard, SkipForward, Zap,
 } from 'lucide-react';
 
 const frequencyLabels: Record<string, string> = {
@@ -24,11 +25,14 @@ export default function RecurringPage() {
   const [upcoming, setUpcoming] = useState<RecurringPattern[]>([]);
   const [loading, setLoading] = useState(true);
   const [detecting, setDetecting] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [recordingId, setRecordingId] = useState<number | null>(null);
   const [detectResult, setDetectResult] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<RecurringPattern | null>(null);
   const [showDismissed, setShowDismissed] = useState(false);
   const [dismissedPatterns, setDismissedPatterns] = useState<RecurringPattern[]>([]);
+  const [pausedPatterns, setPausedPatterns] = useState<RecurringPattern[]>([]);
 
   const { data: categories } = useApi<Category[]>('/categories');
   const { data: accounts } = useApi<Account[]>('/accounts');
@@ -46,12 +50,14 @@ export default function RecurringPage() {
   const fetchPatterns = useCallback(async () => {
     setLoading(true);
     try {
-      const [active, upcomingData] = await Promise.all([
+      const [active, upcomingData, paused] = await Promise.all([
         api.get<RecurringPattern[]>('/recurring?status=active'),
         api.get<RecurringPattern[]>('/recurring/upcoming?days=30'),
+        api.get<RecurringPattern[]>('/recurring?status=paused'),
       ]);
       setPatterns(active);
       setUpcoming(upcomingData);
+      setPausedPatterns(paused);
     } catch {
       // ignore
     } finally {
@@ -142,6 +148,48 @@ export default function RecurringPage() {
     if (showDismissed) fetchDismissed();
   };
 
+  const handleRecordPayment = async (id: number) => {
+    setRecordingId(id);
+    try {
+      const res = await api.post<{ transaction: any; nextExpected: string }>(`/recurring/${id}/record`, {});
+      setDetectResult(`Recorded payment for "${res.transaction.description}". Next due: ${formatDate(res.nextExpected)}`);
+      fetchPatterns();
+    } catch (err: any) {
+      setDetectResult(err.message || 'Failed to record payment');
+    } finally {
+      setRecordingId(null);
+    }
+  };
+
+  const handleSkip = async (id: number) => {
+    try {
+      const res = await api.post<{ nextExpected: string }>(`/recurring/${id}/skip`, {});
+      setDetectResult(`Skipped occurrence. Next due: ${formatDate(res.nextExpected)}`);
+      fetchPatterns();
+    } catch (err: any) {
+      setDetectResult(err.message || 'Failed to skip');
+    }
+  };
+
+  const handleProcessDue = async () => {
+    setProcessing(true);
+    setDetectResult(null);
+    try {
+      const res = await api.post<{ processed: number; skipped: number; message: string }>('/recurring/process-due', {});
+      setDetectResult(res.message);
+      fetchPatterns();
+    } catch (err: any) {
+      setDetectResult(err.message || 'Failed to process overdue bills');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const overdueCount = upcoming.filter(b => {
+    const diff = Math.ceil((new Date(b.next_expected).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    return diff <= 0;
+  }).length;
+
   const getDaysUntil = (dateStr: string) => {
     const diff = Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
     if (diff < 0) return 'Overdue';
@@ -196,6 +244,17 @@ export default function RecurringPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl md:text-2xl font-bold">Bills & Recurring</h1>
         <div className="flex items-center gap-2">
+          {overdueCount > 0 && (
+            <button
+              onClick={handleProcessDue}
+              disabled={processing}
+              className="btn-secondary flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 ring-1 ring-amber-300 dark:ring-amber-500/30"
+            >
+              <Zap className={`w-4 h-4 ${processing ? 'animate-pulse' : ''}`} />
+              <span className="hidden sm:inline">{processing ? 'Processing...' : `Process ${overdueCount} Overdue`}</span>
+              <span className="sm:hidden">{overdueCount}</span>
+            </button>
+          )}
           <button
             onClick={handleDetect}
             disabled={detecting}
@@ -270,6 +329,23 @@ export default function RecurringPage() {
                       {getDaysUntil(bill.next_expected)}
                     </p>
                   </div>
+                  <div className="hidden sm:flex items-center gap-0.5">
+                    <button
+                      onClick={() => handleRecordPayment(bill.id)}
+                      disabled={recordingId === bill.id}
+                      className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-gray-400 hover:text-emerald-500"
+                      title="Record payment"
+                    >
+                      <CreditCard className={`w-4 h-4 ${recordingId === bill.id ? 'animate-pulse' : ''}`} />
+                    </button>
+                    <button
+                      onClick={() => handleSkip(bill.id)}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
+                      title="Skip this occurrence"
+                    >
+                      <SkipForward className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -339,6 +415,21 @@ export default function RecurringPage() {
                       </p>
                     </div>
                     <div className="hidden sm:flex items-center gap-0.5">
+                      <button
+                        onClick={() => handleRecordPayment(pattern.id)}
+                        disabled={recordingId === pattern.id}
+                        className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-gray-400 hover:text-emerald-500"
+                        title="Record payment"
+                      >
+                        <CreditCard className={`w-4 h-4 ${recordingId === pattern.id ? 'animate-pulse' : ''}`} />
+                      </button>
+                      <button
+                        onClick={() => handleSkip(pattern.id)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
+                        title="Skip occurrence"
+                      >
+                        <SkipForward className="w-4 h-4" />
+                      </button>
                       <button onClick={() => openEdit(pattern)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" title="Edit">
                         <Edit2 className="w-4 h-4" />
                       </button>
@@ -367,6 +458,55 @@ export default function RecurringPage() {
           </div>
         )}
       </section>
+
+      {/* Paused Patterns */}
+      {pausedPatterns.length > 0 && (
+        <section>
+          <h2 className="text-base md:text-lg font-semibold mb-3 flex items-center gap-2 text-gray-400">
+            <Pause className="w-5 h-5" />
+            Paused ({pausedPatterns.length})
+          </h2>
+          <div className="space-y-2 opacity-75">
+            {pausedPatterns.map(pattern => (
+              <div key={pattern.id} className="card p-3 md:p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-9 h-9 md:w-10 md:h-10 rounded-xl flex-shrink-0 flex items-center justify-center opacity-50"
+                    style={{ backgroundColor: `${pattern.category_color || '#6b7280'}15` }}
+                  >
+                    <Pause className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{pattern.description}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {frequencyLabels[pattern.frequency]} &middot; {formatCurrency(pattern.avg_amount)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => handleStatusChange(pattern.id, 'active')}
+                    className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-gray-400 hover:text-emerald-500"
+                    title="Resume"
+                  >
+                    <Play className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => openEdit(pattern)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400" title="Edit">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleStatusChange(pattern.id, 'dismissed')}
+                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 hover:text-red-500"
+                    title="Dismiss"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Dismissed Patterns Toggle */}
       <div className="text-center">
