@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { createBudgetSchema, updateBudgetSchema } from '../schemas';
 
 const router = Router();
 
@@ -40,11 +42,8 @@ router.get('/', async (req: AuthRequest, res) => {
   res.json(rows);
 });
 
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', validate(createBudgetSchema), async (req: AuthRequest, res) => {
   const { category_id, amount, month, year } = req.body;
-  if (!category_id || !amount || !month || !year) {
-    return res.status(400).json({ error: 'category_id, amount, month, and year are required' });
-  }
 
   try {
     const { rows } = await pool.query(
@@ -63,7 +62,7 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 });
 
-router.put('/:id', async (req: AuthRequest, res) => {
+router.put('/:id', validate(updateBudgetSchema), async (req: AuthRequest, res) => {
   const { amount } = req.body;
   const { rows } = await pool.query('SELECT * FROM budgets WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
   if (rows.length === 0) return res.status(404).json({ error: 'Budget not found' });

@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { exchangeTokenSchema } from '../schemas';
 
 const router = Router();
 
@@ -56,9 +58,8 @@ router.post('/create-link-token', async (req: AuthRequest, res) => {
 });
 
 // POST /api/plaid/exchange-token — exchange public token after Plaid Link success
-router.post('/exchange-token', async (req: AuthRequest, res) => {
+router.post('/exchange-token', validate(exchangeTokenSchema), async (req: AuthRequest, res) => {
   const { public_token, institution: institutionMeta } = req.body;
-  if (!public_token) return res.status(400).json({ error: 'public_token is required' });
 
   const client = await pool.connect();
   try {

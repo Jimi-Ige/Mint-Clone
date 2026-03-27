@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { createAccountSchema, updateAccountSchema } from '../schemas';
 
 const router = Router();
 
@@ -9,9 +11,8 @@ router.get('/', async (req: AuthRequest, res) => {
   res.json(rows);
 });
 
-router.post('/', async (req: AuthRequest, res) => {
-  const { name, type = 'checking', balance = 0, currency = 'USD' } = req.body;
-  if (!name) return res.status(400).json({ error: 'Name is required' });
+router.post('/', validate(createAccountSchema), async (req: AuthRequest, res) => {
+  const { name, type, balance, currency } = req.body;
 
   const { rows } = await pool.query(
     'INSERT INTO accounts (user_id, name, type, balance, currency) VALUES ($1, $2, $3, $4, $5) RETURNING *',
@@ -20,7 +21,7 @@ router.post('/', async (req: AuthRequest, res) => {
   res.status(201).json(rows[0]);
 });
 
-router.put('/:id', async (req: AuthRequest, res) => {
+router.put('/:id', validate(updateAccountSchema), async (req: AuthRequest, res) => {
   const { name, type, currency } = req.body;
   const { rows } = await pool.query('SELECT * FROM accounts WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
   if (rows.length === 0) return res.status(404).json({ error: 'Account not found' });

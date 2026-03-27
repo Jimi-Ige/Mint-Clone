@@ -227,7 +227,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">New Password</label>
-                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="input text-sm" placeholder="New password (min 6 chars)" />
+                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="input text-sm" placeholder="Min 8 chars, upper+lower+number" />
               </div>
             </div>
           </div>

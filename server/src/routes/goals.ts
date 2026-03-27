@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import pool from '../db/connection';
 import { AuthRequest } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { createGoalSchema, contributeSchema } from '../schemas';
 
 const router = Router();
 
@@ -9,9 +11,8 @@ router.get('/', async (req: AuthRequest, res) => {
   res.json(rows);
 });
 
-router.post('/', async (req: AuthRequest, res) => {
-  const { name, target_amount, deadline, icon = 'target', color = '#10b981' } = req.body;
-  if (!name || !target_amount) return res.status(400).json({ error: 'Name and target_amount are required' });
+router.post('/', validate(createGoalSchema), async (req: AuthRequest, res) => {
+  const { name, target_amount, deadline, icon, color } = req.body;
 
   const { rows } = await pool.query(
     'INSERT INTO savings_goals (user_id, name, target_amount, deadline, icon, color) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
@@ -35,9 +36,8 @@ router.put('/:id', async (req: AuthRequest, res) => {
   res.json(result.rows[0]);
 });
 
-router.patch('/:id/contribute', async (req: AuthRequest, res) => {
+router.patch('/:id/contribute', validate(contributeSchema), async (req: AuthRequest, res) => {
   const { amount } = req.body;
-  if (!amount || amount <= 0) return res.status(400).json({ error: 'Positive amount is required' });
 
   const { rows } = await pool.query('SELECT * FROM savings_goals WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
   if (rows.length === 0) return res.status(404).json({ error: 'Goal not found' });
