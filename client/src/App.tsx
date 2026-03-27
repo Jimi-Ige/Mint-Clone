@@ -6,8 +6,13 @@ import { ToastProvider } from './components/ui/Toast';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import Layout from './components/layout/Layout';
 import LoginPage from './pages/LoginPage';
+import NotFoundPage from './pages/NotFoundPage';
 import OnboardingWizard from './components/onboarding/OnboardingWizard';
+import SessionExpiredDialog from './components/ui/SessionExpiredDialog';
+import OfflineBanner from './components/ui/OfflineBanner';
 import { DashboardSkeleton } from './components/ui/Skeleton';
+import { useSessionCheck } from './hooks/useSessionCheck';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 
 // Lazy-loaded route pages
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -29,6 +34,8 @@ function PageSuspense({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  const { expired, handleExpiredLogout } = useSessionCheck();
+  const online = useOnlineStatus();
 
   if (loading) {
     return (
@@ -46,18 +53,23 @@ function AppRoutes() {
   if (!user.onboarding_completed) return <OnboardingWizard />;
 
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<PageSuspense><DashboardPage /></PageSuspense>} />
-        <Route path="/transactions" element={<PageSuspense><TransactionsPage /></PageSuspense>} />
-        <Route path="/budget" element={<PageSuspense><BudgetPage /></PageSuspense>} />
-        <Route path="/goals" element={<PageSuspense><GoalsPage /></PageSuspense>} />
-        <Route path="/recurring" element={<PageSuspense><RecurringPage /></PageSuspense>} />
-        <Route path="/insights" element={<PageSuspense><InsightsPage /></PageSuspense>} />
-        <Route path="/reports" element={<PageSuspense><ReportsPage /></PageSuspense>} />
-        <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
-      </Route>
-    </Routes>
+    <>
+      {!online && <OfflineBanner />}
+      {expired && <SessionExpiredDialog onLogout={handleExpiredLogout} />}
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<PageSuspense><DashboardPage /></PageSuspense>} />
+          <Route path="/transactions" element={<PageSuspense><TransactionsPage /></PageSuspense>} />
+          <Route path="/budget" element={<PageSuspense><BudgetPage /></PageSuspense>} />
+          <Route path="/goals" element={<PageSuspense><GoalsPage /></PageSuspense>} />
+          <Route path="/recurring" element={<PageSuspense><RecurringPage /></PageSuspense>} />
+          <Route path="/insights" element={<PageSuspense><InsightsPage /></PageSuspense>} />
+          <Route path="/reports" element={<PageSuspense><ReportsPage /></PageSuspense>} />
+          <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+    </>
   );
 }
 
