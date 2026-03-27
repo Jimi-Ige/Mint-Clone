@@ -36,6 +36,12 @@ validateEnv();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProd = process.env.NODE_ENV === 'production';
+
+// Trust Azure App Service reverse proxy
+if (isProd) {
+  app.set('trust proxy', 1);
+}
 
 // Security headers
 app.use(helmet({
@@ -71,7 +77,10 @@ const categorizeLimiter = rateLimit({
 });
 
 app.use(limiter);
-app.use(cors());
+app.use(cors({
+  origin: isProd ? process.env.CORS_ORIGIN || true : true,
+  credentials: true,
+}));
 app.use(express.json({ limit: '1mb' }));
 
 // Health & version (no auth, no rate limit)
