@@ -12,7 +12,7 @@ import { useToast } from '../components/ui/Toast';
 const colorOptions = ['#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#0ea5e9', '#a855f7', '#f43f5e'];
 
 export default function SettingsPage() {
-  const { user, updateBaseCurrency, updateUser } = useAuth();
+  const { user, updateBaseCurrency, updateUser, logout } = useAuth();
   const { toast } = useToast();
   const { data: categories, refetch: refetchCats } = useApi<Category[]>('/categories');
   const { data: accounts, refetch: refetchAccounts } = useApi<Account[]>('/accounts');
