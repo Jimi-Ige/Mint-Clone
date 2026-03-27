@@ -7,7 +7,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "migrate": "tsx src/db/runMigrations.ts",
+    "migrate:create": "tsx src/db/createMigration.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
