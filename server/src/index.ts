@@ -31,6 +31,8 @@ import analyticsRouter from './routes/analytics';
 import splitsRouter from './routes/splits';
 import reportsRouter from './routes/reports';
 import webhooksRouter from './routes/webhooks';
+import notificationsRouter from './routes/notifications';
+import { checkNotifications } from './services/notifications';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -235,6 +237,7 @@ app.use('/api/filter-presets', authMiddleware, filterPresetsRouter);
 app.use('/api/analytics', authMiddleware, analyticsRouter);
 app.use('/api/splits', authMiddleware, splitsRouter);
 app.use('/api/reports', authMiddleware, reportsRouter);
+app.use('/api/notifications', authMiddleware, notificationsRouter);
 
 // Serve static files in production
 const clientDist = path.join(__dirname, '../../client/dist');
@@ -252,9 +255,20 @@ initializeDatabase()
       logger.info(`Server running on http://localhost:${PORT}`, { env: process.env.NODE_ENV || 'development' });
     });
 
+    // Run notification checks every hour
+    const NOTIFICATION_INTERVAL = 60 * 60 * 1000;
+    const notificationTimer = setInterval(() => {
+      checkNotifications().catch(err =>
+        logger.error('Notification check error', { error: (err as Error).message })
+      );
+    }, NOTIFICATION_INTERVAL);
+    // Run once on startup after a short delay
+    setTimeout(() => checkNotifications().catch(() => {}), 10_000);
+
     // Graceful shutdown
     const shutdown = async (signal: string) => {
       logger.info(`${signal} received — shutting down gracefully`);
+      clearInterval(notificationTimer);
 
       server.close(async () => {
         logger.info('HTTP server closed');
