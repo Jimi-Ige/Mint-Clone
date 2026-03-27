@@ -233,6 +233,16 @@ export interface CategoryBreakdown {
   subcategories: { name: string; color: string; icon: string; amount: number; transactionCount: number }[];
 }
 
+export interface ReportSummary {
+  period: { startDate: string; endDate: string };
+  totalIncome: number;
+  totalExpenses: number;
+  netFlow: number;
+  savingsRate: number;
+  transactionCount: number;
+  topCategories: { name: string; amount: number }[];
+}
+
 export interface TransactionFilters {
   search?: string;
   type?: string;

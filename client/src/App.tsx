@@ -9,6 +9,7 @@ import GoalsPage from './pages/GoalsPage';
 import SettingsPage from './pages/SettingsPage';
 import RecurringPage from './pages/RecurringPage';
 import InsightsPage from './pages/InsightsPage';
+import ReportsPage from './pages/ReportsPage';
 import LoginPage from './pages/LoginPage';
 
 function AppRoutes() {
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/recurring" element={<RecurringPage />} />
         <Route path="/insights" element={<InsightsPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>
