@@ -193,6 +193,6 @@ React SPA (Vite)  →  Azure App Service (Express API)  →  Azure PostgreSQL
 | v4.1 | Security hardening (Zod validation, Helmet, env check, password rules, webhooks, rate limiting) | Done |
 | v4.2 | Docker & CI/CD (Dockerfile, docker-compose, GitHub Actions, health endpoints) | Done |
 | v4.3 | Database migrations (versioned migration files, startup runner) | Done |
-| v4.4 | Azure deployment (App Service, PostgreSQL, Key Vault, production config) | Planned |
+| v4.4 | Azure deployment (App Service, PostgreSQL, Key Vault, production config) | Done |
 | v4.5 | Monitoring & logging (structured logs, audit trail, graceful shutdown) | Planned |
 | v4.6 | Client hardening (404 page, session expiry, HttpOnly cookies, offline warning) | Planned |
