@@ -94,54 +94,7 @@ export async function seedUserData(userId: number) {
       );
     }
 
-    // Seed a default account
-    const accResult = await client.query(
-      'INSERT INTO accounts (user_id, name, type, balance) VALUES ($1, $2, $3, $4) RETURNING id',
-      [userId, 'Main Checking', 'checking', 5000]
-    );
-    const accountId = accResult.rows[0].id;
-
-    // Get category IDs for seeding transactions
-    const catRows = await client.query('SELECT id, name FROM categories WHERE user_id = $1', [userId]);
-    const catMap: Record<string, number> = {};
-    catRows.rows.forEach((r: any) => { catMap[r.name] = r.id; });
-
-    // Seed sample transactions
-    const now = new Date();
-    let totalBalance = 0;
-
-    for (let i = 0; i < 6; i++) {
-      const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthStr = (m: Date, day: number) => {
-        const d = new Date(m.getFullYear(), m.getMonth(), day);
-        return d.toISOString().split('T')[0];
-      };
-
-      const txns: [number, number, string, string, string][] = [
-        [catMap['Salary'], 5000, 'income', 'Monthly Salary', monthStr(month, 1)],
-        [catMap['Groceries'], 320 + Math.round(Math.random() * 80), 'expense', 'Grocery Shopping', monthStr(month, 3)],
-        [catMap['Rent'], 1500, 'expense', 'Monthly Rent', monthStr(month, 1)],
-        [catMap['Utilities'], 120 + Math.round(Math.random() * 30), 'expense', 'Electric & Water', monthStr(month, 5)],
-        [catMap['Transportation'], 80 + Math.round(Math.random() * 40), 'expense', 'Gas & Transit', monthStr(month, 8)],
-        [catMap['Entertainment'], 50 + Math.round(Math.random() * 50), 'expense', 'Movies & Games', monthStr(month, 12)],
-        [catMap['Dining Out'], 60 + Math.round(Math.random() * 40), 'expense', 'Restaurant', monthStr(month, 18)],
-        [catMap['Subscriptions'], 45, 'expense', 'Netflix & Spotify', monthStr(month, 1)],
-      ];
-
-      if (i % 2 === 0) txns.push([catMap['Freelance'], 1200, 'income', 'Freelance Project', monthStr(month, 15)]);
-      if (i < 3) txns.push([catMap['Shopping'], 200, 'expense', 'New Shoes', monthStr(month, 20)]);
-
-      for (const [catId, amount, type, desc, date] of txns) {
-        await client.query(
-          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, description, date) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [userId, accountId, catId, amount, type, desc, date]
-        );
-        totalBalance += type === 'income' ? amount : -amount;
-      }
-    }
-
-    await client.query('UPDATE accounts SET balance = $1 WHERE id = $2', [totalBalance, accountId]);
-    console.log(`Seeded data for user ${userId}`);
+    console.log(`Seeded categories and tags for user ${userId}`);
   } finally {
     client.release();
   }
