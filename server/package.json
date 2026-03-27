@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run postbuild",
+    "postbuild": "node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','db','migrations'),d=p.join('dist','db','migrations');fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).filter(f=>f.endsWith('.sql')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)));console.log('Copied migration files to dist/')\"",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
